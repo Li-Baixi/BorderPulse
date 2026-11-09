@@ -339,10 +339,12 @@ async function boot() {
   document.addEventListener("click", (e) => { if (e.target.closest("#sheet .close")) closeSheet(); });
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
-    /* when an updated worker takes over, offer a one-tap reload */
+    /* when an updated worker takes over, offer a one-tap reload
+       (first install claims silently — no toast on a visitor's first load) */
     let refreshing = false;
+    const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (refreshing) return;
+      if (refreshing || !hadController) return;
       refreshing = true;
       const t = document.createElement("div");
       t.id = "toast";

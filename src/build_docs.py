@@ -122,6 +122,8 @@ def main():
         if len(post) < 45:             # Huanggang: reopened 2026, ~8 weeks history
             continue
         recent = post[post["Date"] >= post["Date"].max() - pd.Timedelta(days=365)]
+        if recent["flow"].median() < 50:   # STK: passenger clearance suspended, all-zero
+            continue
         # weekday-of-week baseline (median), trained on last 365 days
         wk = recent.groupby(recent["Date"].dt.dayofweek)["flow"].median()
         base = wk.reindex(range(7)).fillna(wk.median())
@@ -189,7 +191,7 @@ def main():
         forecast[key] = rows
 
     out = {
-        "app": "BorderPulse", "version": "0.1.2",
+        "app": "BorderPulse", "version": "0.1.3",
         "built_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "data_through": through.isoformat(),
         "reopen": REOPEN.isoformat(),
