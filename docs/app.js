@@ -337,6 +337,18 @@ async function boot() {
   document.addEventListener("click", (e) => { if (e.target.closest("#sheet .close")) closeSheet(); });
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
+    /* when an updated worker takes over, offer a one-tap reload */
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      const t = document.createElement("div");
+      t.id = "toast";
+      t.innerHTML = `新版本 v${S.d.version} 已就绪
+        <button onclick="location.reload()">刷新</button>`;
+      document.body.appendChild(t);
+      requestAnimationFrame(() => t.classList.add("show"));
+    });
   }
 }
 boot();

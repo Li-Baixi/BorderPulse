@@ -189,7 +189,7 @@ def main():
         forecast[key] = rows
 
     out = {
-        "app": "BorderPulse", "version": "0.1.0",
+        "app": "BorderPulse", "version": "0.1.1",
         "built_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "data_through": through.isoformat(),
         "reopen": REOPEN.isoformat(),
