@@ -327,7 +327,7 @@ async function boot() {
   const fs = S.d.forecast[key(S.cp, S.dir)];
   const sat = fs.findIndex((x) => x.dow === 5);
   S.dateIdx = sat >= 0 ? sat : 0;
-  $("#meta").textContent = `ImmD 日数据至 ${S.d.data_through} · 构建 ${S.d.built_at} · v${S.d.version}`;
+  $("#meta").textContent = `ImmD 数据至 ${S.d.data_through} · v${S.d.version}`;
   renderCal();
   $("#tabbar").addEventListener("click", (e) => {
     const b = e.target.closest("button");
@@ -345,8 +345,10 @@ async function boot() {
       const t = document.createElement("div");
       t.id = "toast";
       t.innerHTML = `新版本 v${S.d.version} 已就绪
-        <button onclick="location.reload()">刷新</button>`;
+        <button onclick="location.reload()">刷新</button>
+        <button aria-label="关闭" style="background:none;padding:6px;color:inherit;font-weight:400">✕</button>`;
       document.body.appendChild(t);
+      t.querySelector("button[aria-label=关闭]").onclick = () => t.remove();
       requestAnimationFrame(() => t.classList.add("show"));
     });
   }

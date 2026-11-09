@@ -30,7 +30,7 @@ OUT = os.path.join(ROOT, "docs", "data.json")
 CPS = {
     "Lo Wu":                       {"cn": "罗湖",           "short": "LoWu"},
     "Lok Ma Chau Spur Line":       {"cn": "落马洲支线",      "short": "LMC-Spur"},
-    "Lok Ma Chau":                 {"cn": "落马州/皇岗巴士",  "short": "LMC"},
+    "Lok Ma Chau":                 {"cn": "落马洲",          "short": "LMC"},
     "Huanggang":                   {"cn": "皇岗",           "short": "HG"},
     "Shenzhen Bay":                {"cn": "深圳湾",          "short": "SZB"},
     "Man Kam To":                  {"cn": "文锦渡",          "short": "MKT"},
@@ -189,7 +189,7 @@ def main():
         forecast[key] = rows
 
     out = {
-        "app": "BorderPulse", "version": "0.1.1",
+        "app": "BorderPulse", "version": "0.1.2",
         "built_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "data_through": through.isoformat(),
         "reopen": REOPEN.isoformat(),
