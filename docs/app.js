@@ -129,6 +129,8 @@ function renderCmp() {
   const rows = cps.map((cp) => ({ cp, st: S.d.stats[key(cp, S.dir)], r: S.d.forecast[key(cp, S.dir)][S.dateIdx] }));
   const best = rows.slice().sort((a, b) => (a.r.level - b.r.level) || (a.r.p_busy - b.r.p_busy))[0];
   rows.forEach((x) => (x.diff = (x.r.base - best.r.base) / Math.max(best.r.base, 1)));
+  /* small denominators (STK ~1k/day) blow up percentages — switch to a multiple */
+  const relTxt = (d) => (d > 2 ? "×" + Math.round(1 + d) : "+" + Math.round(d * 100) + "%");
 
   let h = `<div class="row">${segDir("seg-cmp")}</div>${chips}`;
   rows.sort((a, b) => (b.r.level - a.r.level) || (b.r.p_busy - a.r.p_busy));
@@ -140,13 +142,13 @@ function renderCmp() {
       <div class="stats">
         <div><div class="v num">${fmtK(x.r.base)}</div><div class="k">预计人次</div></div>
         <div><div class="v num">${pct(x.r.p_busy)}</div><div class="k">繁忙概率</div></div>
-        <div><div class="v num">${isBest ? "—" : "+" + Math.round(x.diff * 100) + "%"}</div><div class="k">对比最佳</div></div>
+        <div><div class="v num">${isBest ? "—" : relTxt(x.diff)}</div><div class="k">对比最佳</div></div>
       </div>
       <div class="meter"><i style="width:${Math.min(100, x.r.p_busy * 100)}%"></i></div>
       ${sp}
       <div class="advice">${isBest
         ? `✅ 当日最佳选择 —— 预计 ${fmtN(x.r.base)} 人次，繁忙概率仅 ${pct(x.r.p_busy)}`
-        : `比 <b>${best.st.cn}</b> 多约 ${fmtN(x.r.base - best.r.base)} 人次（+${Math.round(x.diff * 100)}%），建议优先考虑 <b>${best.st.cn}</b>`}</div>
+        : `比 <b>${best.st.cn}</b> 多约 ${fmtN(x.r.base - best.r.base)} 人次（${relTxt(x.diff)}），建议优先考虑 <b>${best.st.cn}</b>`}</div>
     </div>`;
   });
   el.innerHTML = h;
@@ -169,8 +171,8 @@ function spark(k) {
   const last = pts[pts.length - 1];
   return `<svg class="spark" viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none" aria-label="近 60 日客流">
     <polyline points="${pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}"
-      fill="none" stroke="var(--accent)" stroke-width="2"/>
-    <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/>
+      fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="var(--accent)"/>
   </svg>`;
 }
 
@@ -349,6 +351,7 @@ async function boot() {
         <button aria-label="关闭" style="background:none;padding:6px;color:inherit;font-weight:400">✕</button>`;
       document.body.appendChild(t);
       t.querySelector("button[aria-label=关闭]").onclick = () => t.remove();
+      setTimeout(() => t.remove(), 12000);
       requestAnimationFrame(() => t.classList.add("show"));
     });
   }
