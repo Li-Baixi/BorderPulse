@@ -9,8 +9,8 @@ Reads data/raw/immd_daily.csv and writes docs/data.json for the static PWA:
                 series, recursive 14-day forecast starting TODAY
   4. Markov     4-band state transition chain per series -> per-day state
                 distribution as a second, probabilistic opinion
-  5. MC queue   Python-side Monte Carlo risk for the report; the PWA runs the
-                same model client-side for its live tab
+  5. MC queue   runs client-side in the PWA's live risk tab (same model as
+                models/mc_queue.py, which the report figures use)
   6. NLP        attraction sentiment page (docs/nlp.json produced separately by
                 models/nlp.py) is merged in here so the app fetches one file
 
@@ -30,7 +30,6 @@ from models.features import Panel, REOPEN, FEATURE_NAMES, load_panel, logf
 from models.lof import flag_anomalies
 from models.gbt import HistGBR
 from models.markov import fit_transition, forecast_dist, state_of
-from models import mc_queue
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)

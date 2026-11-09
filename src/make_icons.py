@@ -14,9 +14,8 @@ BG_DARK = (13, 54, 107)   # blue step 700
 WHITE = (255, 255, 255)
 
 
-def pulse_line(w, y0, stroke):
+def pulse_line(w, y0):
     """Crossing-gate pulse: flat, spike up, dip down, flat."""
-    p = stroke // 2
     pts = [
         (0.08 * w, y0), (0.30 * w, y0),
         (0.38 * w, y0 - 0.24 * w), (0.46 * w, y0 + 0.15 * w),
@@ -42,7 +41,7 @@ def draw_icon(size, maskable=False):
     w = size - 2 * pad
     y0 = pad + 0.5 * w
     stroke = max(4, int(size * 0.055))
-    for a, b in pulse_line(w, y0, stroke):
+    for a, b in pulse_line(w, y0):
         d.line([a, b], fill=WHITE, width=stroke)
         for pt in (a, b):
             d.ellipse([pt[0] - stroke / 2, pt[1] - stroke / 2,

@@ -26,6 +26,7 @@ from models.features import (Panel, REOPEN, load_panel, logf, holiday_windows,
                              phase_of)
 from models.lof import flag_anomalies
 from models.gbt import HistGBR
+from models.markov import state_of as level_of   # same band definition as the product
 
 CPS8 = ["Lo Wu", "Lok Ma Chau Spur Line", "Lok Ma Chau", "Shenzhen Bay",
         "Man Kam To", "Heung Yuen Wai",
@@ -61,10 +62,6 @@ def festive_multipliers(p, end_ts):
     df = pd.DataFrame(rows, columns=["dir", "code", "phase", "ratio"])
     g = df.groupby(["dir", "code", "phase"])["ratio"].agg(["median", "count"])
     return {k: (r["median"] if r["count"] >= 10 else 1.0) for k, r in g.iterrows()}
-
-
-def level_of(v, q):
-    return 1 + (v > q[50]) + (v > q[85]) + (v > q[95])
 
 
 def series_quantiles(p, end_ts):
@@ -131,10 +128,10 @@ def main():
         test_days = pd.date_range(origin_ts + pd.Timedelta(days=1), periods=HORIZON, freq="D")
 
         # ---- LOF flags on pre-origin data ----
+        wm = weekday_medians(p, end_ts)
         anomalies = {}
         for s in p.columns:
             flow = p[s][p.index <= end_ts].values.astype(float)
-            wm = weekday_medians(p, end_ts)
             base = np.take(wm[s], np.arange(len(flow)) % 7)
             m, _ = flag_anomalies(flow, base)
             anomalies[s] = np.concatenate([m, np.zeros(len(p) - len(m), bool)])
@@ -151,7 +148,6 @@ def main():
         sk = GradientBoostingRegressor(n_estimators=300, max_depth=5,
                                        learning_rate=0.05, subsample=0.8, random_state=7005)
         sk.fit(X, y)
-        wm = weekday_medians(p, end_ts)
         fmult = festive_multipliers(p, end_ts)
         q = series_quantiles(p, end_ts)
         print("origin %s: train %d rows, ours %.0fs (%d trees)" %

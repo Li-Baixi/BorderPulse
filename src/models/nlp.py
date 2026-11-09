@@ -80,7 +80,10 @@ class TfIdf:
         n = len(docs)
         vocab = {w: c for w, c in df.items() if c >= self.min_df and c <= self.max_df_ratio * n}
         if len(vocab) > self.max_features:
-            vocab = dict(sorted(vocab.items(), key=lambda kv: -kv[1])[: self.max_features])
+            # tie-break on the word itself: count ties must not depend on
+            # dict/set iteration order (PYTHONHASHSEED), or every rerun
+            # truncates a slightly different vocabulary
+            vocab = dict(sorted(vocab.items(), key=lambda kv: (-kv[1], kv[0]))[: self.max_features])
         self.vocab_ = {w: j for j, w in enumerate(sorted(vocab))}
         self.idf_ = np.log((1 + n) / (1 + np.array(list(vocab.values()), dtype=float))) + 1
         return self
@@ -157,13 +160,8 @@ class LogReg:
 
 
 def auc_own(y, p):
-    """AUC via rank statistics (Mann-Whitney U)."""
-    order = np.argsort(p)
-    ranks = np.empty(len(p))
-    ranks[order] = np.arange(1, len(p) + 1)
-    # average ranks for ties
-    s = pd.Series(p)
-    ranks = s.rank(method="average").values
+    """AUC via rank statistics (Mann-Whitney U); average ranks for ties."""
+    ranks = pd.Series(p).rank(method="average").values
     pos = y == 1
     return float((ranks[pos].sum() - pos.sum() * (pos.sum() + 1) / 2) / (pos.sum() * (~pos).sum()))
 
