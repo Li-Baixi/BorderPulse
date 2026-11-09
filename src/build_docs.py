@@ -258,7 +258,7 @@ def main():
         q = s["q"]
         dire = s["dir"]
         rows = []
-        for i in range(1, HORIZON + 1):
+        for i in range(HORIZON):          # window starts TODAY (i=0), not tomorrow
             d = today + dt.timedelta(days=i)
             b = float(base[d.weekday()])
             hit = festive.get(d)
@@ -283,7 +283,7 @@ def main():
         forecast[key] = rows
 
     out = {
-        "app": "BorderPulse", "version": "0.2.0",
+        "app": "BorderPulse", "version": "0.2.1",
         "built_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "data_through": through.isoformat(),
         "reopen": REOPEN.isoformat(),
@@ -292,8 +292,9 @@ def main():
         "levels": ["Smooth", "Normal", "Busy", "Packed"],
         "intraday": {"templates": TEMPLATES, "open": OPEN},
         "stats": stats, "spark": spark, "forecast": forecast,
-        "notes": "v0.2: weekday median x festive multiplier x intraday hour templates "
-                 "(gaussian time-of-day mixture, self-calibrated P50-P99 bands). GBT to replace.",
+        "notes": "v0.2.1: weekday median x festive multiplier x intraday hour templates "
+                 "(gaussian time-of-day mixture, self-calibrated P50-P99 bands); "
+                 "window starts today. GBT to replace.",
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as fh:

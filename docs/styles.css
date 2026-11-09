@@ -150,6 +150,8 @@ main { flex: 1; padding: 14px 14px 90px; }
 .cal .cell.g3 { background: var(--serious);  color: var(--on-status); }
 .cal .cell.g4 { background: var(--critical); color: var(--on-status); }
 .cal .cell.we { box-shadow: inset 0 0 0 1.5px var(--page); }
+.cal .hd.today { color: var(--accent); font-weight: 700; }
+.cal .cell.today { box-shadow: inset 0 0 0 2px var(--page), inset 0 0 0 4px var(--ink); }
 
 /* ---------- compare cards ---------- */
 .cmp-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -210,6 +212,12 @@ select, .sel {
 
 /* ---------- hourly strip in the day sheet ---------- */
 .hr { font-size: 12px; color: var(--muted); margin: 14px 0 2px; }
+.hr b { color: var(--ink); }
+.hwrap { position: relative; }
+.nowline {
+  position: absolute; top: -3px; bottom: 0; width: 2px; margin-left: -1px;
+  background: var(--ink); opacity: 0.55; border-radius: 1px;
+}
 .hours { display: flex; align-items: flex-end; gap: 2px; height: 68px; margin: 8px 0 3px; }
 .hours i { flex: 1; border-radius: 2px 2px 1px 1px; min-height: 3px; }
 .hours i.off { height: 4px !important; background: var(--baseline); }

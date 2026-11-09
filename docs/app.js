@@ -62,6 +62,12 @@ function legend() {
     `<span class="chip ${l.cls}"><span class="g">${l.glyph}</span>${l.cn}</span>`).join("")}</div>`;
 }
 
+/* local calendar date as ISO yyyy-mm-dd (forecast rows carry the same format) */
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /* ---------------- calendar heatmap ---------------- */
 function calBlock(cps, start, count) {
   const day = (i) => S.d.forecast[key(cps[0], S.dir)][i];
@@ -70,7 +76,8 @@ function calBlock(cps, start, count) {
   h += `<div class="cp"></div>`;
   for (let i = start; i < start + count; i++) {
     const r = day(i);
-    h += `<div class="hd ${r.dow >= 5 ? "we" : ""}">${DOW[r.dow]}<br>${r.date.slice(5).replace("-", "/")}</div>`;
+    const isToday = r.date === todayISO();
+    h += `<div class="hd ${r.dow >= 5 ? "we" : ""}${isToday ? " today" : ""}">${DOW[r.dow]}<br>${r.date.slice(5).replace("-", "/")}</div>`;
   }
   cps.forEach((cp) => {
     const st = S.d.stats[key(cp, S.dir)];
@@ -79,7 +86,8 @@ function calBlock(cps, start, count) {
       const r = S.d.forecast[key(cp, S.dir)][i];
       const l = lv(r.level);
       const g = r.level >= 3 ? l.glyph : "";
-      h += `<button class="cell g${r.level} ${r.dow >= 5 ? "we" : ""}" data-cp="${cp}" data-i="${i}"
+      const isToday = r.date === todayISO();
+      h += `<button class="cell g${r.level} ${r.dow >= 5 ? "we" : ""}${isToday ? " today" : ""}" data-cp="${cp}" data-i="${i}"
         aria-label="${st.cn} ${r.date} ${l.cn}">${g}</button>`;
     }
   });
@@ -94,7 +102,7 @@ function renderCal() {
   for (let s = 0; s < n; s += 7) blocks += calBlock(cps, s, Math.min(7, n - s));
   el.innerHTML = `<div class="row">${segDir("seg-cal")}${legend()}</div>`
     + blocks
-    + `<p class="hint">点按格子看详情 · 色档由各口岸自身 P50/P85/P95 分位标定（复关后数据）</p>`;
+    + `<p class="hint">点按格子看详情 · 深色描边格 = 今天 · 色档由各口岸自身 P50/P85/P95 分位标定（复关后数据）</p>`;
   bindSeg("seg-cal");
   el.addEventListener("click", (e) => {
     const c = e.target.closest(".cell");
@@ -105,10 +113,14 @@ function renderCal() {
 function openCellSheet(cp, i) {
   const st = S.d.stats[key(cp, S.dir)];
   const r = S.d.forecast[key(cp, S.dir)][i];
+  const isToday = r.date === todayISO();
+  const sp = S.d.spark[key(cp, S.dir)];
+  const ai = sp && sp.flow.length ? sp.flow.length - 1 : -1;   // latest ImmD actual
   openSheet(`<h3>${st.cn} ${st.cp}</h3>
-    <div class="sub">${r.date}（周${DOW[r.dow]}）· ${DIR_CN[S.dir]} · ${r.festive ? "节日期 " + r.festive : "非节日"}</div>
+    <div class="sub">${r.date}（周${DOW[r.dow]}）${isToday ? " · 今天" : ""} · ${DIR_CN[S.dir]} · ${r.festive ? "节日期 " + r.festive : "非节日"}</div>
     ${chip(r.level)}
     <div class="kv"><span>预计客流 Expected flow</span><b class="num">${fmtN(r.base)}</b></div>
+    ${ai >= 0 ? `<div class="kv"><span>最近实测 Actual（${sp.dates[ai]}）</span><b class="num">${fmtN(sp.flow[ai])}</b></div>` : ""}
     <div class="kv"><span>区间 P10–P90</span><b class="num">${fmtK(r.lo)} – ${fmtK(r.hi)}</b></div>
     <div class="kv"><span>繁忙概率 P(Busy)</span><b class="num">${pct(r.p_busy)}</b></div>
     <div class="kv"><span>该口岸分位带 P50/P85/P95</span><b class="num small">${fmtK(st.q["50"])} / ${fmtK(st.q["85"])} / ${fmtK(st.q["95"])}</b></div>
@@ -142,6 +154,9 @@ function hourlyBlock(st, r) {
   const MU = 2, T = 30;                       // service 1/2 per min per counter, 30-min line
   const q90 = 0.5 * (st.q["85"] + st.q["95"]);
   const c = Math.max(4, Math.ceil((q90 * 0.12 / 60 / MU) / 0.95));  // same calibration as risk tab
+  const now = new Date();
+  const isToday = r.date === todayISO();
+  const nowH = now.getHours() + now.getMinutes() / 60;
   const met = [];
   w.forEach((x, h) => {
     if (x <= 0) return;
@@ -150,14 +165,21 @@ function hourlyBlock(st, r) {
   const pk = met.reduce((a, b) => (b.lam > a.lam ? b : a));
   const lvl = (m) => (m.p30 < 0.05 ? 1 : m.p30 < 0.25 ? 2 : m.p30 < 0.6 ? 3 : 4);
 
-  /* best 2h window within civil hours 08-21 (lowest combined queue risk) */
-  let best = null;
-  for (let j = 0; j < met.length - 1; j++) {
-    if (met[j + 1].h !== met[j].h + 1) continue;
-    if (met[j].h < 8 || met[j].h > 20) continue;
-    const s = met[j].p30 + met[j + 1].p30;
-    if (!best || s < best.s) best = { s, h: met[j].h };
-  }
+  /* best 2h window within civil hours 08-21 (lowest combined queue risk);
+     viewing TODAY -> only hours still ahead of the clock qualify (fall back
+     to the full-day window late at night when <2 open hours remain) */
+  const findBest = (from) => {
+    let b = null;
+    for (let j = 0; j < met.length - 1; j++) {
+      if (met[j + 1].h !== met[j].h + 1) continue;
+      if (met[j].h < Math.max(8, from) || met[j].h > 20) continue;
+      const s = met[j].p30 + met[j + 1].p30;
+      if (!b || s < b.s) b = { s, h: met[j].h };
+    }
+    return b;
+  };
+  const ahead = isToday ? findBest(Math.ceil(nowH)) : null;
+  const best = ahead || findBest(8);
 
   const mx = Math.max(...w);
   const bars = w.map((x, h) => {
@@ -169,13 +191,17 @@ function hourlyBlock(st, r) {
   }).join("");
   const axis = [0, 3, 6, 9, 12, 15, 18, 21].map((h) => `<span>${fmtH(h)}</span>`).join("");
   const [o, cH] = S.d.intraday.open[st.short];
+  const nowLine = isToday ? `<i class="nowline" style="left:${(nowH / 24 * 100).toFixed(1)}%" aria-hidden="true"></i>` : "";
+  const nowTag = isToday
+    ? ` · <b>现在 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}</b>` : "";
+  const pkState = !isToday ? "" : nowH >= pk.h + 1 ? "（已过）" : nowH >= pk.h ? "（现在）" : "";
 
-  return `<div class="hr">分时段预测 · 逐小时（${fmtOpen(o)}–${fmtOpen(cH)} 通关）</div>
-    <div class="hours" role="img" aria-label="逐小时客流与排队风险">${bars}</div>
+  return `<div class="hr">分时段预测 · 逐小时（${fmtOpen(o)}–${fmtOpen(cH)} 通关）${nowTag}</div>
+    <div class="hwrap"><div class="hours" role="img" aria-label="逐小时客流与排队风险">${bars}</div>${nowLine}</div>
     <div class="haxis">${axis}</div>
     <div class="advice" style="margin-top:8px">
-      峰值 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>（约 ${fmtK(pk.lam * 60)} 人次/时 · <span class="nw">P(排队&gt;30min)≈${pct(pk.p30)}</span>）<br>
-      ${best ? `最顺 <b>${fmtH(best.h)}–${fmtH(best.h + 2)}</b>，建议此时段出发` : ""}
+      峰值 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>${pkState}（约 ${fmtK(pk.lam * 60)} 人次/时 · <span class="nw">P(排队&gt;30min)≈${pct(pk.p30)}</span>）<br>
+      ${best ? `${ahead ? "接下来" : "最顺"} <b>${fmtH(best.h)}–${fmtH(best.h + 2)}</b>，建议此时段出发` : ""}
     </div>
     <p class="hint">小时曲线为模型估计（口岸类型模板 × 当日总量，ImmD 仅公布日频数据），非实测；
     色档按 P(排队&gt;30min) &lt;5% / &lt;25% / &lt;60% 划分，含对数正态流量不确定性（σ 自标定）。</p>`;
