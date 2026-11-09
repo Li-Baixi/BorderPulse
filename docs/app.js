@@ -62,30 +62,40 @@ function legend() {
 }
 
 /* ---------------- calendar heatmap ---------------- */
-function renderCal() {
-  const el = $("#v-cal");
-  const cps = cpOrder(S.dir);
-  const days = S.d.forecast[key(cps[0], S.dir)];
-  let h = `<div class="row">${segDir("seg-cal")}${legend()}</div><div id="calwrap"><div id="cal">`;
+function calBlock(cps, start, count) {
+  const day = (i) => S.d.forecast[key(cps[0], S.dir)][i];
+  const range = `${day(start).date.slice(5).replace("-", "/")} – ${day(start + count - 1).date.slice(5).replace("-", "/")}`;
+  let h = `<div class="calblock"><div class="caltitle">${range}</div><div class="cal">`;
   h += `<div class="cp"></div>`;
-  days.forEach((r, i) => {
-    const we = r.dow >= 5 ? "we" : "";
-    h += `<div class="hd ${we}">${DOW[r.dow]}<br>${r.date.slice(5).replace("-", "/")}</div>`;
-  });
+  for (let i = start; i < start + count; i++) {
+    const r = day(i);
+    h += `<div class="hd ${r.dow >= 5 ? "we" : ""}">${DOW[r.dow]}<br>${r.date.slice(5).replace("-", "/")}</div>`;
+  }
   cps.forEach((cp) => {
     const st = S.d.stats[key(cp, S.dir)];
     h += `<div class="cp"><b>${st.short}</b>${st.cn}</div>`;
-    S.d.forecast[key(cp, S.dir)].forEach((r, i) => {
+    for (let i = start; i < start + count; i++) {
+      const r = S.d.forecast[key(cp, S.dir)][i];
       const l = lv(r.level);
       const g = r.level >= 3 ? l.glyph : "";
       h += `<button class="cell g${r.level} ${r.dow >= 5 ? "we" : ""}" data-cp="${cp}" data-i="${i}"
         aria-label="${st.cn} ${r.date} ${l.cn}">${g}</button>`;
-    });
+    }
   });
-  h += `</div></div><p class="hint">点按格子看详情 · 色档由各口岸自身 P50/P85/P95 分位标定（复关后数据）</p>`;
-  el.innerHTML = h;
+  return h + `</div></div>`;
+}
+
+function renderCal() {
+  const el = $("#v-cal");
+  const cps = cpOrder(S.dir);
+  const n = S.d.forecast[key(cps[0], S.dir)].length;
+  let blocks = "";
+  for (let s = 0; s < n; s += 7) blocks += calBlock(cps, s, Math.min(7, n - s));
+  el.innerHTML = `<div class="row">${segDir("seg-cal")}${legend()}</div>`
+    + blocks
+    + `<p class="hint">点按格子看详情 · 色档由各口岸自身 P50/P85/P95 分位标定（复关后数据）</p>`;
   bindSeg("seg-cal");
-  $("#cal").addEventListener("click", (e) => {
+  el.addEventListener("click", (e) => {
     const c = e.target.closest(".cell");
     if (c) openCellSheet(c.dataset.cp, +c.dataset.i);
   });
