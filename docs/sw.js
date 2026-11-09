@@ -1,5 +1,5 @@
 /* BorderPulse service worker — cache-first shell, network-first data. */
-const VERSION = "bp-0.2.2";
+const VERSION = "bp-0.3.0";
 const SHELL = [
   "./", "./index.html", "./styles.css", "./app.js",
   "./manifest.webmanifest", "./data.json",

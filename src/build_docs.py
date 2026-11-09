@@ -1,65 +1,62 @@
 # -*- coding: utf-8 -*-
-"""BorderPulse docs builder.
+"""BorderPulse docs builder — v0.3 model-driven pipeline.
 
-Reads data/raw/immd_daily.csv (ImmD Statistics on Daily Passenger Traffic) and
-writes docs/data.json consumed by the static PWA:
+Reads data/raw/immd_daily.csv and writes docs/data.json for the static PWA:
 
-  * per control-point x direction stats self-calibrated from post-reopening data
-    (P50/P85/P95/P99 daily flow -> 4 congestion bands + effective capacity)
-  * v1 baseline forecast for the next 14 days: weekday-of-week median x festive
-    multiplier, with lognormal uncertainty (sigma from residual log-deviations)
-  * recent 60-day sparkline series
+  1. panel      8 control points x 2 directions, post-reopening focus
+  2. LOF        per-series anomaly flags (own implementation) -> training filter
+  3. GBT        hand-written histogram gradient-boosted trees, pooled over all
+                series, recursive 14-day forecast starting TODAY
+  4. Markov     4-band state transition chain per series -> per-day state
+                distribution as a second, probabilistic opinion
+  5. MC queue   Python-side Monte Carlo risk for the report; the PWA runs the
+                same model client-side for its live tab
+  6. NLP        attraction sentiment page (docs/nlp.json produced separately by
+                models/nlp.py) is merged in here so the app fetches one file
 
-Run:  python src/build_docs.py
+Run:  python src/build_docs.py          (models/nlp.py first if reviews moved)
 """
 import datetime as dt
 import json
 import math
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from models.features import Panel, REOPEN, FEATURE_NAMES, load_panel, logf
+from models.lof import flag_anomalies
+from models.gbt import HistGBR
+from models.markov import fit_transition, forecast_dist, state_of
+from models import mc_queue
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 RAW = os.path.join(ROOT, "data", "raw", "immd_daily.csv")
-FESTIVE = "https://www.immd.gov.hk/opendata/eng/transport/immigration_clearance/statistics_passenger_traffic_festival_periods.csv"
 OUT = os.path.join(ROOT, "docs", "data.json")
+NLP = os.path.join(ROOT, "docs", "nlp.json")
+HORIZON = 14
 
-# --- control-point configuration (land boundary + cross-boundary rail) -------
 CPS = {
     "Lo Wu":                       {"cn": "罗湖",           "short": "LoWu"},
     "Lok Ma Chau Spur Line":       {"cn": "落马洲支线",      "short": "LMC-Spur"},
     "Lok Ma Chau":                 {"cn": "落马洲",          "short": "LMC"},
-    "Huanggang":                   {"cn": "皇岗",           "short": "HG"},
     "Shenzhen Bay":                {"cn": "深圳湾",          "short": "SZB"},
     "Man Kam To":                  {"cn": "文锦渡",          "short": "MKT"},
-    "Sha Tau Kok":                 {"cn": "沙头角",          "short": "STK"},
     "Heung Yuen Wai":              {"cn": "香园围",          "short": "HYW"},
     "Hong Kong-Zhuhai-Macao Bridge": {"cn": "港珠澳大桥",    "short": "HZMB"},
     "Express Rail Link West Kowloon": {"cn": "高铁西九龙",   "short": "ERL"},
 }
-# spelling variants that appear across the years
-ALIASES = {"Macau Ferry Terminal": "Macao Ferry Terminal"}
 
-REOPEN = dt.date(2023, 2, 6)      # full border reopening
-HORIZON = 14                      # forecast horizon (days)
-
-# --- intraday model ----------------------------------------------------------
-# ImmD publishes daily totals only, so the hour-of-day shape comes from
-# parametric templates: a mixture of gaussian time-of-day bumps (morning
-# commuter wave / midday leisure hump / evening return wave), parameterised by
-# control-point class (rail commuter / high-speed rail / road) x direction x
-# day type (weekday / Sat / Sun / festive first-mid-last). The web app masks
-# each template to the control point's clearing hours and normalises, then
-# scales by the forecast daily total.
+# --- intraday model (unchanged from v0.2; see report Methods) ----------------
 PROFILE_OF = {
     "Lo Wu": "rail", "Lok Ma Chau Spur Line": "rail",
     "Express Rail Link West Kowloon": "erl",
     "Lok Ma Chau": "road", "Man Kam To": "road", "Heung Yuen Wai": "road",
     "Shenzhen Bay": "road", "Hong Kong-Zhuhai-Macao Bridge": "road",
 }
-# passenger clearing hours (immd.gov.hk control-point pages)
 OPEN = {
     "LoWu": (6.5, 24.0), "LMC-Spur": (6.5, 22.5), "LMC": (0.0, 24.0),
     "MKT": (7.0, 22.0), "SZB": (6.5, 24.0), "HYW": (7.0, 22.0),
@@ -68,8 +65,7 @@ OPEN = {
 
 
 def curve(bumps, base=0.0):
-    """24-hour weight vector = flat base + sum of circular gaussian bumps
-    (center hour, width in hours, mass)."""
+    """24-hour weight vector = flat base + sum of circular gaussian bumps."""
     w = [base] * 24
     for center, width, mass in bumps:
         for h in range(24):
@@ -79,7 +75,7 @@ def curve(bumps, base=0.0):
 
 
 TEMPLATES = {
-    "rail": {  # LoWu / LMC-Spur: commuter rail, sharp AM + PM waves on weekdays
+    "rail": {
         "Departure": {
             "wk": curve([(7.8, 1.2, 1.0), (12.5, 2.2, 0.8), (18.6, 2.0, 2.4)]),
             "sa": curve([(10.8, 2.6, 2.2), (18.2, 2.4, 1.0)]),
@@ -97,7 +93,7 @@ TEMPLATES = {
             "hl": curve([(11.0, 2.4, 0.8), (18.8, 2.0, 2.8)]),
         },
     },
-    "erl": {  # high-speed rail: timetable-driven waves, sharper than commuter rail
+    "erl": {
         "Departure": {
             "wk": curve([(8.4, 1.1, 1.4), (12.5, 2.0, 1.0), (18.8, 1.6, 2.4)]),
             "sa": curve([(9.6, 1.8, 2.2), (16.5, 2.2, 1.2)]),
@@ -115,7 +111,7 @@ TEMPLATES = {
             "hl": curve([(11.5, 2.2, 0.8), (19.4, 1.8, 2.6)]),
         },
     },
-    "road": {  # coach / private-vehicle ports: flatter, small overnight base (24h CPs)
+    "road": {
         "Departure": {
             "wk": curve([(8.2, 1.8, 1.6), (13.0, 2.8, 1.4), (18.4, 2.2, 2.2)], 0.25),
             "sa": curve([(10.5, 2.8, 2.2), (16.5, 2.4, 1.2)], 0.25),
@@ -135,65 +131,8 @@ TEMPLATES = {
     },
 }
 
-# built-in cross-border holiday calendar (HK + mainland), 2023-2027.
-# The ImmD festive-period dataset stops at 2020-12-31, so festival factors are
-# learned against this calendar instead (see report: data-stale finding).
-HOLIDAYS = {
-    "CNY":      [(2023, 1, 19, 2023, 1, 28), (2024, 2, 7, 2024, 2, 16),
-                 (2025, 1, 26, 2025, 2, 4), (2026, 2, 13, 2026, 2, 23),
-                 (2027, 2, 3, 2027, 2, 13)],
-    "ChingMing": [(y, 4, 3, y, 4, 6) for y in range(2023, 2028)],
-    "Easter":   [(2023, 4, 6, 2023, 4, 11), (2024, 3, 28, 2024, 4, 2),
-                 (2025, 4, 17, 2025, 4, 22), (2026, 4, 2, 2026, 4, 7),
-                 (2027, 3, 25, 2027, 3, 30)],
-    "MayDay":   [(y, 4, 30, y, 5, 5) for y in range(2023, 2028)],
-    "NatDay":   [(2023, 9, 28, 2023, 10, 7), (2024, 9, 30, 2024, 10, 8),
-                 (2025, 9, 30, 2025, 10, 9), (2026, 9, 30, 2026, 10, 9),
-                 (2027, 9, 30, 2027, 10, 9)],
-    "Xmas":     [(y, 12, 22, y, 12, 27) for y in range(2023, 2028)],
-    "NewYear":  [(y, 12, 30, y + 1, 1, 3) for y in range(2023, 2027)],
-}
-
-
-def load_daily():
-    df = pd.read_csv(RAW, encoding="utf-8-sig")
-    df.columns = [c.strip() for c in df.columns]
-    df = df.rename(columns={"Arrival / Departure": "Dir"})
-    df["Date"] = pd.to_datetime(df["Date"], format="%d-%m-%Y")
-    df["cp"] = df["Control Point"].str.strip().replace(ALIASES)
-    df = df[df["cp"].isin(CPS)].copy()
-    df["flow"] = df["Total"].astype(float)
-    return df[["Date", "cp", "Dir", "flow"]]
-
-
-def load_festive():
-    """Return {date: (code, offset, length)} from the built-in calendar."""
-    out = {}
-    for code, wins in HOLIDAYS.items():
-        for y0, m0, d0, y1, m1, d1 in wins:
-            start, end = dt.date(y0, m0, d0), dt.date(y1, m1, d1)
-            length = (end - start).days + 1
-            d = start
-            while d <= end:
-                out[d] = (code, (d - start).days, length)
-                d += dt.timedelta(days=1)
-    return out
-
-
-def phase_of(offset, length):
-    if offset <= 2:
-        return "first"
-    if offset >= length - 3:
-        return "last"
-    return "mid"
-
-
-def quantiles(x):
-    return {q: float(np.percentile(x, q)) for q in (50, 85, 95, 99)}
-
 
 def lognormal_p(x, thr, sigma):
-    """P(X > thr) for X ~ LogNormal(ln x, sigma)."""
     if thr <= 0 or x <= 0:
         return 0.0
     z = (math.log(thr) - math.log(x)) / max(sigma, 1e-6)
@@ -201,105 +140,139 @@ def lognormal_p(x, thr, sigma):
 
 
 def main():
-    df = load_daily()
-    festive = load_festive()
-    through = df["Date"].max().date()
+    p = load_panel(RAW, keep_cps=list(CPS))
+    panel = Panel(p, list(p.columns))
+    through = p.index[-1].date()
+    post_mask = np.asarray(p.index >= pd.Timestamp(REOPEN))
 
-    stats, series, spark = {}, {}, {}
-    for (cp, dire), g in df.groupby(["cp", "Dir"]):
-        g = g.sort_values("Date")
-        post = g[g["Date"].dt.date >= REOPEN]
-        if len(post) < 45:             # Huanggang: reopened 2026, ~8 weeks history
-            continue
-        recent = post[post["Date"] >= post["Date"].max() - pd.Timedelta(days=365)]
-        if recent["flow"].median() < 50:   # STK: passenger clearance suspended, all-zero
-            continue
-        # weekday-of-week baseline (median), trained on last 365 days
-        wk = recent.groupby(recent["Date"].dt.dayofweek)["flow"].median()
-        base = wk.reindex(range(7)).fillna(wk.median())
-        # residual spread in log space -> forecast uncertainty
-        pred = recent["Date"].dt.dayofweek.map(base).astype(float)
-        resid = np.log(recent["flow"].clip(lower=1) / pred.clip(lower=1))
-        sigma = float(resid.std()) if len(resid) > 30 else 0.25
-        key = "%s|%s" % (CPS[cp]["short"], dire)
-        stats[key] = {
-            "cp": cp, "cn": CPS[cp]["cn"], "short": CPS[cp]["short"], "dir": dire,
-            "profile": PROFILE_OF[cp],
-            "q": quantiles(recent["flow"].values), "weekday_base": [round(float(v)) for v in base],
-            "sigma": round(sigma, 4), "n_days": int(len(post)),
-        }
-        tail = g.tail(60)
-        spark[key] = {
-            "dates": [d.strftime("%m-%d") for d in tail["Date"]],
-            "flow": [round(float(v)) for v in tail["flow"]],
-        }
-        series[key] = (recent, base, sigma)
+    # ---------- 2. LOF anomaly flags per series ----------
+    anomalies, flag_counts, weekday_base = {}, {}, {}
+    for s in p.columns:
+        flow = p[s].values.astype(float)
+        wm = (pd.Series(flow[post_mask])
+              .groupby(p.index[post_mask].dayofweek).median())
+        wm = wm.reindex(range(7)).fillna(wm.median())
+        weekday_base[s] = wm.values
+        base = np.take(wm.values, p.index.dayofweek.values)
+        m, _ = flag_anomalies(flow, base)
+        anomalies[s] = m
+        flag_counts[str(s)] = int((m & post_mask).sum())
 
-    # festive multipliers learned per (direction, code, phase): northbound and
-    # southbound peaks sit at opposite ends of a holiday, so pooling directions
-    # cancels the signal.
-    mult = {}
-    for key, (recent, base, sigma) in series.items():
-        dire = stats[key]["dir"]
-        for _, r in recent.iterrows():
-            hit = festive.get(r["Date"].date())
+    # ---------- 3. GBT: pooled training + recursive forecast ----------
+    X, y, keys = panel.matrices(anomalies)
+    ntr = int(len(X) * 0.97)
+    model = HistGBR(n_estimators=400, eval_set=(X[ntr:], y[ntr:]),
+                    patience=40, seed=7005).fit(X[:ntr], y[:ntr])
+
+    # per-series residual sigma on training rows (honest uncertainty bands)
+    pred_tr = model.predict(X)
+    resid = y - pred_tr
+    sigma_s = {}
+    for s in p.columns:
+        mask = np.array([k[0] == s for k in keys])
+        sigma_s[s] = float(resid[mask].std()) if mask.sum() > 30 else float(resid.std())
+
+    forecast = {}
+    mk_chain, mk_state = {}, {}
+    for s in p.columns:
+        flow_s = p[s]
+        post = flow_s[post_mask]
+        # stats block (quantile bands etc.)
+        q = {qq: float(np.percentile(post, qq)) for qq in (50, 85, 95, 99)}
+
+        # Markov chain on LOF-cleaned post-reopening states
+        clean = post[~anomalies[s][post_mask]]
+        states = np.array([state_of(v, q) for v in clean])
+        P = fit_transition(states)
+        mk_chain[s] = P
+        mk_state[s] = state_of(float(flow_s.iloc[-1]), q)   # today's last actual
+
+        # recursive forecast starting today
+        hist = logf(flow_s.values)
+        d0 = dt.date.today()
+        rows = []
+        for h in range(HORIZON):
+            d = d0 + dt.timedelta(days=h)
+            xrow = panel.row(s, d, hist)
+            yhat = float(model.predict(xrow[None, :])[0])
+            hist = np.append(hist, yhat)
+            mu = float(np.exp(yhat))
+            sig = sigma_s[s]
+            level = 1 + (mu > q[50]) + (mu > q[85]) + (mu > q[95])
+            hit, code, ph = panel.hol_info(d)[0], "", ""
             if hit:
                 code, off, ln = hit
-                b = float(base[r["Date"].dayofweek])
-                mk = "%s|%s|%s" % (dire, code, phase_of(off, ln))
-                mult.setdefault(mk, []).append(r["flow"] / max(b, 1.0))
-    fmult = {c: round(float(np.median(v)), 3) for c, v in mult.items() if len(v) >= 20}
-
-    # 14-day baseline forecast
-    forecast = {}
-    today = dt.date.today()
-    for key, (recent, base, sigma) in series.items():
-        s = stats[key]
-        q = s["q"]
-        dire = s["dir"]
-        rows = []
-        for i in range(HORIZON):          # window starts TODAY (i=0), not tomorrow
-            d = today + dt.timedelta(days=i)
-            b = float(base[d.weekday()])
-            hit = festive.get(d)
-            m = 1.0
-            code = ""
-            if hit:
-                c0, off, ln = hit
-                mk = "%s|%s|%s" % (dire, c0, phase_of(off, ln))
-                m = fmult.get(mk, 1.0)
-                code = c0
-            mu = b * m
-            level = 1 + (mu > q[50]) + (mu > q[85]) + (mu > q[95])
+                ph = ("first" if off <= 2 else "last" if off >= ln - 3 else "mid")
+            steps = (d - through).days          # Markov steps from last actual
+            dist = forecast_dist(P, mk_state[s], max(steps, 1))[steps - 1]
             rows.append({
                 "date": d.isoformat(), "dow": d.weekday(),
-                "base": round(mu), "festive": code if m != 1.0 else "",
-                "ph": phase_of(off, ln) if hit else "",
+                "base": round(mu), "festive": code, "ph": ph,
                 "level": int(level),
-                "p_busy": round(lognormal_p(mu, q[85], sigma), 3),
-                "lo": round(mu * math.exp(-1.2816 * sigma)),
-                "hi": round(mu * math.exp(1.2816 * sigma)),
+                "p_busy": round(lognormal_p(mu, q[85], sig), 3),
+                "lo": round(mu * math.exp(-1.2816 * sig)),
+                "hi": round(mu * math.exp(1.2816 * sig)),
+                "mk": [round(float(v), 3) for v in dist],
             })
-        forecast[key] = rows
+        forecast["%s|%s" % (CPS[s[0]]["short"], s[1])] = rows
+
+    # ---------- stats / spark ----------
+    stats, spark = {}, {}
+    for s in p.columns:
+        flow_s = p[s]
+        post = flow_s[post_mask]
+        q = {qq: float(np.percentile(post, qq)) for qq in (50, 85, 95, 99)}
+        key = "%s|%s" % (CPS[s[0]]["short"], s[1])
+        stats[key] = {
+            "cp": s[0], "cn": CPS[s[0]]["cn"], "short": CPS[s[0]]["short"],
+            "dir": s[1], "profile": PROFILE_OF[s[0]],
+            "q": q, "weekday_base": [round(float(v)) for v in weekday_base[s]],
+            "sigma": round(sigma_s[s], 4), "n_days": int(post.notna().sum()),
+        }
+        tail = flow_s.tail(60)
+        spark[key] = {
+            "dates": [d.strftime("%m-%d") for d in tail.index],
+            "flow": [round(float(v)) for v in tail],
+        }
+
+    # ---------- model card (backtest numbers if present) ----------
+    card = {"name": "HistGBR (own NumPy, %d trees)" % model.best_m_,
+            "target": "log daily flow", "features": len(FEATURE_NAMES),
+            "train_rows": int(len(X))}
+    bt_path = os.path.join(ROOT, "report", "backtest.json")
+    if os.path.exists(bt_path):
+        with open(bt_path, encoding="utf-8") as fh:
+            bt = json.load(fh)
+        card["backtest"] = {k: {kk: round(vv, 3) for kk, vv in v.items()}
+                            for k, v in bt.items() if isinstance(v, dict) and "rmse" in v}
+
+    # ---------- NLP page (merged for one-fetch app) ----------
+    attractions = None
+    if os.path.exists(NLP):
+        with open(NLP, encoding="utf-8") as fh:
+            attractions = json.load(fh)
 
     out = {
-        "app": "BorderPulse", "version": "0.2.1",
+        "app": "BorderPulse", "version": "0.3.0",
         "built_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "data_through": through.isoformat(),
         "reopen": REOPEN.isoformat(),
         "horizon": HORIZON,
-        "festive_mult": fmult,
-        "levels": ["Smooth", "Normal", "Busy", "Packed"],
+        "model": card,
+        "lof_flagged": flag_counts,
         "intraday": {"templates": TEMPLATES, "open": OPEN},
         "stats": stats, "spark": spark, "forecast": forecast,
-        "notes": "v0.2.1: weekday median x festive multiplier x intraday hour templates "
-                 "(gaussian time-of-day mixture, self-calibrated P50-P99 bands); "
-                 "window starts today. GBT to replace.",
+        "notes": "v0.3: LOF-cleaned GBT (own NumPy) recursive forecast + Markov "
+                 "state chain + intraday templates + Erlang-C queue; GBT replaces "
+                 "the v0.2 weekday-median baseline.",
     }
+    if attractions:
+        out["nlp"] = attractions
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))
-    print("cps x dir:", len(stats), "| festive codes:", fmult, "| through:", through)
+    print("series:", len(stats), "| LOF flagged:", sum(flag_counts.values()),
+          "| trees:", model.best_m_, "| through:", through)
     print("wrote", OUT, "%.0f KB" % (os.path.getsize(OUT) / 1024))
 
 

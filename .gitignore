@@ -2,3 +2,7 @@ _build/
 __pycache__/
 *.pyc
 *.docx
+report/
+demo/
+shots/
+data/raw/sg_tripadvisor.csv

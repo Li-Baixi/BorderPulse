@@ -231,6 +231,25 @@ select, .sel {
 .advice b.acc, .advice .acc { color: var(--accent); }
 .nw { white-space: nowrap; }
 
+/* ---------- Markov state bar (day sheet) ---------- */
+.mkbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 4px 0 6px; }
+.mkbar i { height: 100%; }
+.mklg { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11.5px; color: var(--ink-2); margin-bottom: 4px; }
+.mklg span { display: inline-flex; align-items: center; gap: 4px; }
+.mklg i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.mkbar i.g1, .mklg i.g1 { background: var(--good); }
+.mkbar i.g2, .mklg i.g2 { background: var(--warning); }
+.mkbar i.g3, .mklg i.g3 { background: var(--serious); }
+.mkbar i.g4, .mklg i.g4 { background: var(--critical); }
+
+/* ---------- POI tab ---------- */
+.terms { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 8px; }
+.terms span {
+  font-size: 11.5px; color: var(--ink-2);
+  background: var(--page); border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+}
+
 /* ---------- bottom sheet ---------- */
 #sheet-bg {
   position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.38);

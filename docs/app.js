@@ -1,8 +1,10 @@
-/* BorderPulse — v0.2.0 UI.
+/* BorderPulse — v0.3.0 UI.
    Data: docs/data.json built by src/build_docs.py (ImmD daily passenger traffic).
-   Forecast: weekday-median x festive multiplier; bands self-calibrated P50/85/95/99.
+   Forecast: own NumPy histogram GBT (LOF-cleaned training), recursive 14 days;
+   bands self-calibrated P50/85/95/99; per-day Markov 4-state distribution.
    Day sheet: intraday hour-of-day model (class templates x Erlang-C queue per hour).
-   Queue tab: Monte Carlo over an M/M/c toy queue (Erlang-C), runs fully client-side. */
+   Queue tab: Monte Carlo over an M/M/c toy queue (Erlang-C), runs fully client-side.
+   POI tab: TF-IDF + logistic-regression sentiment ranking from docs/nlp.json. */
 
 const S = { d: null, dir: "Departure", tab: "cal", dateIdx: 0, cp: "LoWu", mc: null };
 
@@ -36,6 +38,7 @@ function setTab(t) {
   document.querySelectorAll("#tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
   if (t === "cmp") renderCmp();
   if (t === "risk") renderRisk();
+  if (t === "poi") renderPoi();
 }
 
 /* ---------------- shared bits ---------------- */
@@ -110,6 +113,17 @@ function renderCal() {
   });
 }
 
+/* Markov 4-state distribution row (r.mk = [p1..p4], from the state chain
+   stepped from the last actual day to this date) */
+function mkBlock(r) {
+  if (!r.mk || !r.mk.length) return "";
+  const segs = r.mk.map((p, i) => (p > 0.004 ? `<i class="g${i + 1}" style="width:${(p * 100).toFixed(1)}%"></i>` : "")).join("");
+  const lg = r.mk.map((p, i) => `<span><i class="g${i + 1}"></i>${LV[i].cn} ${pct(p)}</span>`).join("");
+  return `<div class="kv"><span>马尔可夫状态概率 Markov states</span></div>
+    <div class="mkbar" role="img" aria-label="马尔可夫状态概率">${segs}</div>
+    <div class="mklg">${lg}</div>`;
+}
+
 function openCellSheet(cp, i) {
   const st = S.d.stats[key(cp, S.dir)];
   const r = S.d.forecast[key(cp, S.dir)][i];
@@ -123,6 +137,7 @@ function openCellSheet(cp, i) {
     ${ai >= 0 ? `<div class="kv"><span>最近实测 Actual（${sp.dates[ai]}）</span><b class="num">${fmtN(sp.flow[ai])}</b></div>` : ""}
     <div class="kv"><span>区间 P10–P90</span><b class="num">${fmtK(r.lo)} – ${fmtK(r.hi)}</b></div>
     <div class="kv"><span>繁忙概率 P(Busy)</span><b class="num">${pct(r.p_busy)}</b></div>
+    ${mkBlock(r)}
     <div class="kv"><span>该口岸分位带 P50/P85/P95</span><b class="num small">${fmtK(st.q["50"])} / ${fmtK(st.q["85"])} / ${fmtK(st.q["95"])}</b></div>
     ${hourlyBlock(st, r)}`);
 }
@@ -434,6 +449,34 @@ function renderRisk() {
   if (S.mc) renderRiskResult();
 }
 
+/* ---------------- POI: sentiment-ranked off-peak attractions ---------------- */
+function renderPoi() {
+  const el = $("#v-poi");
+  const nlp = S.d.nlp;
+  if (!nlp || !nlp.attractions) {
+    el.innerHTML = '<p class="hint">景点数据未生成（docs/nlp.json 缺失）。</p>';
+    return;
+  }
+  const pretty = (t) => (t.startsWith("NOT_") ? "not·" + t.slice(4) : t);
+  let h = `<p class="hint" style="margin:2px 0 10px">
+    自写 TF-IDF + 逻辑回归情感模型：以 <b>${fmtN(nlp.train_reviews)}</b> 条真实 TripAdvisor 景点评论训练
+    （留出测试 ${fmtN(nlp.test_reviews)} 条：准确率 <b>${pct(nlp.acc)}</b> / AUC <b>${nlp.auc.toFixed(2)}</b>；
+    sklearn 基准 ${pct(nlp.acc_sk)} / ${nlp.auc_sk.toFixed(2)}），再为 12 个香港景点的好评率排序。
+    香港景点评论为<b>演示用合成语料</b>（合成部分已在报告与关于页声明；模型仅用真实评论训练）。</p>`;
+  nlp.attractions.forEach((a, i) => {
+    h += `<div class="card${i === 0 ? " pick" : ""}">
+      <div class="cmp-h"><div class="nm">${a.cn} <span>${a.en}</span></div>
+        <div class="v num" style="font-size:18px;font-weight:700">${pct(a.pos)}</div></div>
+      <div class="meter"><i style="width:${Math.round(a.pos * 100)}%"></i></div>
+      <div class="terms">${a.terms.map((t) => `<span>${pretty(t)}</span>`).join("")}</div>
+      <div class="advice">💡 ${a.tip}</div>
+    </div>`;
+  });
+  h += `<p class="hint">评分为模型对评论的情感判断（好评率 = 判为正面评论的占比）；
+    高亮词为正面评论中 TF-IDF 权重最高的指示词（去除了景点名本身）；「not·词」表示否定语境中的词。</p>`;
+  el.innerHTML = h;
+}
+
 /* ---------------- sheet ---------------- */
 function openSheet(html) {
   $("#sheet").innerHTML = `<i class="grab" aria-hidden="true"></i><button class="close" aria-label="关闭">✕</button>` + html;
@@ -454,7 +497,8 @@ async function boot() {
   const fs = S.d.forecast[key(S.cp, S.dir)];
   const sat = fs.findIndex((x) => x.dow === 5);
   S.dateIdx = sat >= 0 ? sat : 0;
-  $("#meta").textContent = `ImmD 数据至 ${S.d.data_through} · v${S.d.version}`;
+  $("#meta").textContent =
+    `ImmD 数据至 ${S.d.data_through} · ${S.d.model ? "自写 GBT 预测 · " : ""}v${S.d.version}`;
   renderCal();
   $("#tabbar").addEventListener("click", (e) => {
     const b = e.target.closest("button");
