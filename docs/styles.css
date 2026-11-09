@@ -208,6 +208,20 @@ select, .sel {
 .flowline { font-size: 12px; line-height: 2; color: var(--ink); }
 .flowline b { color: var(--accent); }
 
+/* ---------- hourly strip in the day sheet ---------- */
+.hr { font-size: 12px; color: var(--muted); margin: 14px 0 2px; }
+.hours { display: flex; align-items: flex-end; gap: 2px; height: 68px; margin: 8px 0 3px; }
+.hours i { flex: 1; border-radius: 2px 2px 1px 1px; min-height: 3px; }
+.hours i.off { height: 4px !important; background: var(--baseline); }
+.hours .g1 { background: var(--good); }
+.hours .g2 { background: var(--warning); }
+.hours .g3 { background: var(--serious); }
+.hours .g4 { background: var(--critical); }
+.hours i.best { box-shadow: 0 0 0 1.5px var(--accent); border-radius: 3px; }
+.haxis { display: flex; gap: 2px; }
+.haxis span { flex: 3; font-size: 9px; color: var(--muted); line-height: 1.5; }
+.advice b.acc, .advice .acc { color: var(--accent); }
+
 /* ---------- bottom sheet ---------- */
 #sheet-bg {
   position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.38);
@@ -223,6 +237,8 @@ select, .sel {
 }
 #sheet-bg.show { opacity: 1; pointer-events: auto; }
 #sheet.show { transform: translateY(0); }
+#sheet .grab { display: block; width: 36px; height: 4px; border-radius: 2px;
+  background: var(--muted); margin: -6px auto 10px; }
 #sheet h3 { margin: 0 0 2px; font-size: 16px; }
 #sheet .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
 #sheet .kv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--grid); font-size: 13.5px; }

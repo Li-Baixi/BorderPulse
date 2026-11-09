@@ -1,7 +1,8 @@
-/* BorderPulse — v0.1.0 baseline UI.
+/* BorderPulse — v0.2.0 UI.
    Data: docs/data.json built by src/build_docs.py (ImmD daily passenger traffic).
    Forecast: weekday-median x festive multiplier; bands self-calibrated P50/85/95/99.
-   Queue tab: Monte Carlo over an M/M/c toy queue (Erllang-C), runs fully client-side. */
+   Day sheet: intraday hour-of-day model (class templates x Erlang-C queue per hour).
+   Queue tab: Monte Carlo over an M/M/c toy queue (Erlang-C), runs fully client-side. */
 
 const S = { d: null, dir: "Departure", tab: "cal", dateIdx: 0, cp: "LoWu", mc: null };
 
@@ -17,7 +18,7 @@ const DIR_CN = { Departure: "北上", Arrival: "南下" };
 const $ = (s, el) => (el || document).querySelector(s);
 const key = (cp, dir) => cp + "|" + dir;
 const fmtN = (n) => Math.round(n).toLocaleString("en-US");
-const fmtK = (n) => (n >= 10000 ? (n / 1000).toFixed(1) + "万" : fmtN(n));
+const fmtK = (n) => (n >= 10000 ? (n / 10000).toFixed(1) + "万" : fmtN(n));
 const pct = (p) => Math.round(p * 100) + "%";
 const lv = (n) => LV[n - 1];
 
@@ -110,7 +111,105 @@ function openCellSheet(cp, i) {
     <div class="kv"><span>预计客流 Expected flow</span><b class="num">${fmtN(r.base)}</b></div>
     <div class="kv"><span>区间 P10–P90</span><b class="num">${fmtK(r.lo)} – ${fmtK(r.hi)}</b></div>
     <div class="kv"><span>繁忙概率 P(Busy)</span><b class="num">${pct(r.p_busy)}</b></div>
-    <div class="kv"><span>该口岸分位带 P50/P85/P95</span><b class="num small">${fmtK(st.q["50"])} / ${fmtK(st.q["85"])} / ${fmtK(st.q["95"])}</b></div>`);
+    <div class="kv"><span>该口岸分位带 P50/P85/P95</span><b class="num small">${fmtK(st.q["50"])} / ${fmtK(st.q["85"])} / ${fmtK(st.q["95"])}</b></div>
+    ${hourlyBlock(st, r)}`);
+}
+
+/* ---------------- intraday (hour-of-day) model ---------------- */
+const fmtH = (h) => String(h).padStart(2, "0") + ":00";
+const fmtOpen = (t) => {
+  const h = Math.floor(t), m = Math.round((t - h) * 60);
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+};
+
+function dayType(r) {
+  if (r.festive) return { first: "hf", mid: "hm", last: "hl" }[r.ph || "hm"];
+  return r.dow === 5 ? "sa" : r.dow === 6 ? "su" : "wk";
+}
+
+function hourlyWeights(st, r) {
+  /* class template masked to this CP's clearing hours, normalised to sum 1 */
+  const tpl = S.d.intraday.templates[st.profile][st.dir][dayType(r)];
+  const [o, c] = S.d.intraday.open[st.short];
+  const lo = Math.floor(o), hi = Math.ceil(c) - 1;
+  let s = 0;
+  const w = tpl.map((v, h) => (h >= lo && h <= hi ? (s += v, v) : 0));
+  return w.map((v) => v / s);
+}
+
+function hourlyBlock(st, r) {
+  const w = hourlyWeights(st, r);
+  const MU = 2, T = 30;                       // service 1/2 per min per counter, 30-min line
+  const q90 = 0.5 * (st.q["85"] + st.q["95"]);
+  const c = Math.max(4, Math.ceil((q90 * 0.12 / 60 / MU) / 0.95));  // same calibration as risk tab
+  const met = [];
+  w.forEach((x, h) => {
+    if (x <= 0) return;
+    met.push({ h, x, lam: (r.base * x) / 60, p30: pWait30((r.base * x) / 60, c, st.sigma, hash32(st.short + r.date + h)) });
+  });
+  const pk = met.reduce((a, b) => (b.lam > a.lam ? b : a));
+  const lvl = (m) => (m.p30 < 0.05 ? 1 : m.p30 < 0.25 ? 2 : m.p30 < 0.6 ? 3 : 4);
+
+  /* best 2h window within civil hours 08-21 (lowest combined queue risk) */
+  let best = null;
+  for (let j = 0; j < met.length - 1; j++) {
+    if (met[j + 1].h !== met[j].h + 1) continue;
+    if (met[j].h < 8 || met[j].h > 20) continue;
+    const s = met[j].p30 + met[j + 1].p30;
+    if (!best || s < best.s) best = { s, h: met[j].h };
+  }
+
+  const mx = Math.max(...w);
+  const bars = w.map((x, h) => {
+    const m = met.find((q) => q.h === h);
+    if (!m) return `<i class="off"></i>`;
+    const ht = Math.round(8 + (x / mx) * 92);
+    const isBest = best !== null && (h === best.h || h === best.h + 1);
+    return `<i class="g${lvl(m)}${isBest ? " best" : ""}" style="height:${ht}%"></i>`;
+  }).join("");
+  const axis = [0, 3, 6, 9, 12, 15, 18, 21].map((h) => `<span>${fmtH(h)}</span>`).join("");
+  const [o, cH] = S.d.intraday.open[st.short];
+
+  return `<div class="hr">分时段预测 · 逐小时（${fmtOpen(o)}–${fmtOpen(cH)} 通关）</div>
+    <div class="hours" role="img" aria-label="逐小时客流与排队风险">${bars}</div>
+    <div class="haxis">${axis}</div>
+    <div class="advice" style="margin-top:8px">
+      峰值 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>（约 ${fmtK(pk.lam * 60)} 人次/时 · P(排队&gt;30min)≈${pct(pk.p30)}）<br>
+      ${best ? `最顺 <b>${fmtH(best.h)}–${fmtH(best.h + 2)}</b>，建议此时段出发` : ""}
+    </div>
+    <p class="hint">小时曲线为模型估计（口岸类型模板 × 当日总量，ImmD 仅公布日频数据），非实测；
+    色档按 P(排队&gt;30min) &lt;5% / &lt;25% / &lt;60% 划分，含对数正态流量不确定性（σ 自标定）。</p>`;
+}
+
+/* deterministic per (cp, date, hour): the same day always renders the same
+   numbers, so reopening a sheet never contradicts the previous look */
+function hash32(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pWait30(lam, c, sigma, seed) {
+  /* P(wait > 30 min) at an M/M/c counter fed by a lognormal-uncertain arrival
+     rate: analytic Erlang-C tail per draw, saturated draws use the same
+     triangular-dwell cap as the Monte Carlo tab (20/45/120 min -> P=.96). */
+  const MU = 2, T = 30, N = 200, rnd = mulberry32(seed);
+  let acc = 0;
+  for (let t = 0; t < N; t++) {
+    const z = Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+    const lam1 = lam * Math.exp(sigma * z);
+    const rho = lam1 / (c * MU);
+    acc += rho < 0.97 ? erlangC(c, rho) * Math.exp(-(c * MU - lam1) * T) : 0.96;
+  }
+  return acc / N;
 }
 
 /* ---------------- compare ---------------- */
@@ -311,7 +410,7 @@ function renderRisk() {
 
 /* ---------------- sheet ---------------- */
 function openSheet(html) {
-  $("#sheet").innerHTML = `<button class="close" aria-label="关闭">✕</button>` + html;
+  $("#sheet").innerHTML = `<i class="grab" aria-hidden="true"></i><button class="close" aria-label="关闭">✕</button>` + html;
   $("#sheet-bg").classList.add("show");
   $("#sheet").classList.add("show");
 }

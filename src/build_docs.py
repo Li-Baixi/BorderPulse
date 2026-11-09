@@ -45,6 +45,96 @@ ALIASES = {"Macau Ferry Terminal": "Macao Ferry Terminal"}
 REOPEN = dt.date(2023, 2, 6)      # full border reopening
 HORIZON = 14                      # forecast horizon (days)
 
+# --- intraday model ----------------------------------------------------------
+# ImmD publishes daily totals only, so the hour-of-day shape comes from
+# parametric templates: a mixture of gaussian time-of-day bumps (morning
+# commuter wave / midday leisure hump / evening return wave), parameterised by
+# control-point class (rail commuter / high-speed rail / road) x direction x
+# day type (weekday / Sat / Sun / festive first-mid-last). The web app masks
+# each template to the control point's clearing hours and normalises, then
+# scales by the forecast daily total.
+PROFILE_OF = {
+    "Lo Wu": "rail", "Lok Ma Chau Spur Line": "rail",
+    "Express Rail Link West Kowloon": "erl",
+    "Lok Ma Chau": "road", "Man Kam To": "road", "Heung Yuen Wai": "road",
+    "Shenzhen Bay": "road", "Hong Kong-Zhuhai-Macao Bridge": "road",
+}
+# passenger clearing hours (immd.gov.hk control-point pages)
+OPEN = {
+    "LoWu": (6.5, 24.0), "LMC-Spur": (6.5, 22.5), "LMC": (0.0, 24.0),
+    "MKT": (7.0, 22.0), "SZB": (6.5, 24.0), "HYW": (7.0, 22.0),
+    "HZMB": (0.0, 24.0), "ERL": (6.0, 24.0),
+}
+
+
+def curve(bumps, base=0.0):
+    """24-hour weight vector = flat base + sum of circular gaussian bumps
+    (center hour, width in hours, mass)."""
+    w = [base] * 24
+    for center, width, mass in bumps:
+        for h in range(24):
+            dh = min(abs(h - center), 24 - abs(h - center))
+            w[h] += mass * math.exp(-0.5 * (dh / width) ** 2)
+    return [round(v, 4) for v in w]
+
+
+TEMPLATES = {
+    "rail": {  # LoWu / LMC-Spur: commuter rail, sharp AM + PM waves on weekdays
+        "Departure": {
+            "wk": curve([(7.8, 1.2, 1.0), (12.5, 2.2, 0.8), (18.6, 2.0, 2.4)]),
+            "sa": curve([(10.8, 2.6, 2.2), (18.2, 2.4, 1.0)]),
+            "su": curve([(10.8, 2.6, 1.8), (18.2, 2.4, 0.8)]),
+            "hf": curve([(10.0, 2.4, 2.6), (16.0, 2.5, 0.5)]),
+            "hm": curve([(13.5, 3.4, 2.2)]),
+            "hl": curve([(13.0, 3.0, 1.4)]),
+        },
+        "Arrival": {
+            "wk": curve([(7.6, 1.1, 2.4), (12.5, 2.2, 0.7), (18.2, 1.8, 1.3)]),
+            "sa": curve([(14.5, 3.0, 2.2)]),
+            "su": curve([(14.0, 2.6, 1.2), (18.6, 1.8, 2.6)]),
+            "hf": curve([(13.5, 3.0, 1.6)]),
+            "hm": curve([(13.5, 3.4, 2.2)]),
+            "hl": curve([(11.0, 2.4, 0.8), (18.8, 2.0, 2.8)]),
+        },
+    },
+    "erl": {  # high-speed rail: timetable-driven waves, sharper than commuter rail
+        "Departure": {
+            "wk": curve([(8.4, 1.1, 1.4), (12.5, 2.0, 1.0), (18.8, 1.6, 2.4)]),
+            "sa": curve([(9.6, 1.8, 2.2), (16.5, 2.2, 1.2)]),
+            "su": curve([(10.2, 2.0, 1.8), (16.5, 2.2, 0.8)]),
+            "hf": curve([(9.4, 1.8, 2.6), (15.5, 2.2, 0.6)]),
+            "hm": curve([(12.5, 3.0, 2.2)]),
+            "hl": curve([(12.5, 2.8, 1.4)]),
+        },
+        "Arrival": {
+            "wk": curve([(8.6, 1.2, 2.2), (12.5, 2.0, 1.0), (19.4, 1.8, 2.0)]),
+            "sa": curve([(13.0, 2.8, 2.0), (19.0, 1.8, 1.0)]),
+            "su": curve([(13.0, 2.6, 1.4), (19.6, 1.6, 2.2)]),
+            "hf": curve([(13.5, 2.8, 1.6)]),
+            "hm": curve([(13.5, 3.2, 2.2)]),
+            "hl": curve([(11.5, 2.2, 0.8), (19.4, 1.8, 2.6)]),
+        },
+    },
+    "road": {  # coach / private-vehicle ports: flatter, small overnight base (24h CPs)
+        "Departure": {
+            "wk": curve([(8.2, 1.8, 1.6), (13.0, 2.8, 1.4), (18.4, 2.2, 2.2)], 0.25),
+            "sa": curve([(10.5, 2.8, 2.2), (16.5, 2.4, 1.2)], 0.25),
+            "su": curve([(10.5, 2.8, 1.8), (16.5, 2.4, 0.8)], 0.25),
+            "hf": curve([(9.8, 2.6, 2.6), (15.5, 2.4, 0.8)], 0.25),
+            "hm": curve([(13.5, 3.4, 2.2)], 0.25),
+            "hl": curve([(13.0, 3.0, 1.4)], 0.25),
+        },
+        "Arrival": {
+            "wk": curve([(8.0, 1.6, 2.0), (13.0, 2.8, 1.2), (19.0, 2.2, 2.0)], 0.25),
+            "sa": curve([(14.0, 3.0, 2.2)], 0.25),
+            "su": curve([(13.5, 2.8, 1.4), (18.8, 2.2, 2.0)], 0.25),
+            "hf": curve([(13.5, 3.0, 1.6)], 0.25),
+            "hm": curve([(13.5, 3.4, 2.2)], 0.25),
+            "hl": curve([(11.0, 2.4, 0.8), (19.2, 2.2, 2.6)], 0.25),
+        },
+    },
+}
+
 # built-in cross-border holiday calendar (HK + mainland), 2023-2027.
 # The ImmD festive-period dataset stops at 2020-12-31, so festival factors are
 # learned against this calendar instead (see report: data-stale finding).
@@ -134,6 +224,7 @@ def main():
         key = "%s|%s" % (CPS[cp]["short"], dire)
         stats[key] = {
             "cp": cp, "cn": CPS[cp]["cn"], "short": CPS[cp]["short"], "dir": dire,
+            "profile": PROFILE_OF[cp],
             "q": quantiles(recent["flow"].values), "weekday_base": [round(float(v)) for v in base],
             "sigma": round(sigma, 4), "n_days": int(len(post)),
         }
@@ -183,6 +274,7 @@ def main():
             rows.append({
                 "date": d.isoformat(), "dow": d.weekday(),
                 "base": round(mu), "festive": code if m != 1.0 else "",
+                "ph": phase_of(off, ln) if hit else "",
                 "level": int(level),
                 "p_busy": round(lognormal_p(mu, q[85], sigma), 3),
                 "lo": round(mu * math.exp(-1.2816 * sigma)),
@@ -191,16 +283,17 @@ def main():
         forecast[key] = rows
 
     out = {
-        "app": "BorderPulse", "version": "0.1.3",
+        "app": "BorderPulse", "version": "0.2.0",
         "built_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "data_through": through.isoformat(),
         "reopen": REOPEN.isoformat(),
         "horizon": HORIZON,
         "festive_mult": fmult,
         "levels": ["Smooth", "Normal", "Busy", "Packed"],
+        "intraday": {"templates": TEMPLATES, "open": OPEN},
         "stats": stats, "spark": spark, "forecast": forecast,
-        "notes": "v1 baseline: weekday median x festive multiplier, self-calibrated "
-                 "P50/P85/P95/P99 bands (post-2023-02-06). GBT model to replace.",
+        "notes": "v0.2: weekday median x festive multiplier x intraday hour templates "
+                 "(gaussian time-of-day mixture, self-calibrated P50-P99 bands). GBT to replace.",
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as fh:
