@@ -174,7 +174,7 @@ function hourlyBlock(st, r) {
     <div class="hours" role="img" aria-label="逐小时客流与排队风险">${bars}</div>
     <div class="haxis">${axis}</div>
     <div class="advice" style="margin-top:8px">
-      峰值 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>（约 ${fmtK(pk.lam * 60)} 人次/时 · P(排队&gt;30min)≈${pct(pk.p30)}）<br>
+      峰值 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>（约 ${fmtK(pk.lam * 60)} 人次/时 · <span class="nw">P(排队&gt;30min)≈${pct(pk.p30)}</span>）<br>
       ${best ? `最顺 <b>${fmtH(best.h)}–${fmtH(best.h + 2)}</b>，建议此时段出发` : ""}
     </div>
     <p class="hint">小时曲线为模型估计（口岸类型模板 × 当日总量，ImmD 仅公布日频数据），非实测；
