@@ -84,8 +84,13 @@ class TfIdf:
             # dict/set iteration order (PYTHONHASHSEED), or every rerun
             # truncates a slightly different vocabulary
             vocab = dict(sorted(vocab.items(), key=lambda kv: (-kv[1], kv[0]))[: self.max_features])
-        self.vocab_ = {w: j for j, w in enumerate(sorted(vocab))}
-        self.idf_ = np.log((1 + n) / (1 + np.array(list(vocab.values()), dtype=float))) + 1
+        # idf MUST be built in the same order as the index mapping below.
+        # (Bug caught in final review: building it from dict insertion order
+        # attached each word a random other word's idf — consistent within a
+        # run, so metrics looked fine, but it was not the intended TF-IDF.)
+        words = sorted(vocab)
+        self.vocab_ = {w: j for j, w in enumerate(words)}
+        self.idf_ = np.log((1 + n) / (1 + np.array([vocab[w] for w in words], dtype=float))) + 1
         return self
 
     def transform(self, docs):
