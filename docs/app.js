@@ -273,7 +273,7 @@ function renderCmp() {
   const relTxt = (d) => (d > 2 ? "×" + Math.round(1 + d) : "+" + Math.round(d * 100) + "%");
 
   let h = `<div class="row">${segDir("seg-cmp")}</div>${chips}`;
-  rows.sort((a, b) => (b.r.level - a.r.level) || (b.r.p_busy - a.r.p_busy));
+  rows.sort((a, b) => (a.r.level - b.r.level) || (a.r.p_busy - b.r.p_busy)); /* 最顺的排最前 */
   rows.forEach((x, idx) => {
     const sp = spark(key(x.cp, S.dir));
     const isBest = x.cp === best.cp;
