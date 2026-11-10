@@ -7,11 +7,11 @@
   --surface:     #fcfcfb;
   --ink:         #0b0b0b;
   --ink-2:       #52514e;
-  --muted:       #898781;
+  --muted:       #6f6d68;          /* AA on paper (4.9:1) */
   --grid:        #e1e0d9;
   --baseline:    #c3c2b7;
   --border:      rgba(11, 11, 11, 0.10);
-  --accent:      #2a78d6;          /* series-1 blue */
+  --accent:      #2266bd;          /* series-1 blue, AA as text and under white */
   --accent-ink:  #ffffff;
   --good:        #0ca30c;
   --warning:     #fab219;
@@ -19,6 +19,9 @@
   --critical:    #d03b3b;
   --on-status:   #ffffff;
   --on-warning:  #0b0b0b;          /* dark ink on warning yellow */
+  --mask-ink:    #000000;          /* scroll-fade mask colour */
+  --scrim:       rgba(0, 0, 0, 0.38);
+  --shadow-up:   0 -4px 24px rgba(0, 0, 0, 0.18);
   --shadow:      0 1px 3px rgba(11, 11, 11, 0.08), 0 4px 14px rgba(11, 11, 11, 0.06);
 }
 @media (prefers-color-scheme: dark) {
@@ -28,6 +31,7 @@
     --surface:   #1a1a19;
     --ink:       #f0efec;
     --ink-2:     #c3c2b7;
+    --muted:     #94928c;          /* keep AA on dark surfaces after light-mode darkening */
     --grid:      #2c2c2a;
     --baseline:  #383835;
     --border:    rgba(255, 255, 255, 0.10);
@@ -39,8 +43,13 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 button { appearance: none; -webkit-appearance: none; }
 
+/* keyboard focus and touch press feedback */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:active:not(:disabled) { transform: scale(0.96); }
+
 html, body {
   margin: 0;
+  overflow-x: clip;
   background: var(--page);
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", "PingFang HK", "Microsoft YaHei", sans-serif;
@@ -96,7 +105,7 @@ main { flex: 1; padding: 14px 14px 90px; }
 .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
 .card {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink);
   border-radius: 14px; padding: 13px 14px; margin-bottom: 10px; box-shadow: var(--shadow);
 }
 .card.pick { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -130,7 +139,7 @@ main { flex: 1; padding: 14px 14px 90px; }
   gap: 3px;
 }
 .cal .hd {
-  font-size: 9.5px; color: var(--muted); text-align: center; align-self: end;
+  font-size: 10.5px; color: var(--muted); text-align: center; align-self: end;
   padding-bottom: 3px; line-height: 1.25; white-space: nowrap;
 }
 .cal .hd.we { color: var(--ink-2); font-weight: 700; }
@@ -173,8 +182,8 @@ main { flex: 1; padding: 14px 14px 90px; }
 /* date chips: right-edge fade hints the row scrolls */
 .dates {
   display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px;
-  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 16px), transparent 100%);
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 16px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, var(--mask-ink) 0, var(--mask-ink) calc(100% - 16px), transparent 100%);
+  mask-image: linear-gradient(to right, var(--mask-ink) 0, var(--mask-ink) calc(100% - 16px), transparent 100%);
 }
 .dates button {
   flex: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
@@ -196,7 +205,7 @@ select, .sel {
   background: var(--accent); color: var(--accent-ink);
   font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
 }
-.runbtn:disabled { opacity: 0.5; }
+.runbtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; }
 .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 8px; text-align: center; }
 .tile .v { font-size: 20px; font-weight: 700; }
@@ -227,7 +236,7 @@ select, .sel {
 .hours .g4 { background: var(--critical); }
 .hours i.best { box-shadow: 0 0 0 1.5px var(--accent); border-radius: 3px; }
 .haxis { display: flex; gap: 2px; }
-.haxis span { flex: 3; font-size: 9px; color: var(--muted); line-height: 1.5; }
+.haxis span { flex: 3; font-size: 10px; color: var(--muted); line-height: 1.5; }
 .advice b.acc, .advice .acc { color: var(--accent); }
 .nw { white-space: nowrap; }
 
@@ -252,7 +261,7 @@ select, .sel {
 
 /* ---------- bottom sheet ---------- */
 #sheet-bg {
-  position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.38);
+  position: fixed; inset: 0; z-index: 40; background: var(--scrim);
   opacity: 0; pointer-events: none; transition: opacity 0.18s;
 }
 #sheet {
@@ -261,7 +270,7 @@ select, .sel {
   background: var(--surface); border-radius: 18px 18px 0 0;
   padding: 16px 18px calc(18px + env(safe-area-inset-bottom));
   transform: translateY(100%); transition: transform 0.22s;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-up);
 }
 #sheet-bg.show { opacity: 1; pointer-events: auto; }
 #sheet.show { transform: translateY(0); }
@@ -283,7 +292,7 @@ select, .sel {
   background: var(--ink); color: var(--page);
   border-radius: 12px; padding: 10px 12px 10px 16px; font-size: 13px;
   display: flex; align-items: center; gap: 12px;
-  opacity: 0; transition: all 0.25s; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity 0.25s, transform 0.25s; box-shadow: var(--shadow);
   max-width: calc(100vw - 32px); white-space: nowrap;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -291,4 +300,13 @@ select, .sel {
   border: 0; border-radius: 8px; padding: 6px 14px;
   background: var(--accent); color: var(--accent-ink);
   font: inherit; font-size: 13px; font-weight: 600;
+}
+
+/* respect reduced-motion: no sheet slide, toast fade or spinner spin */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
