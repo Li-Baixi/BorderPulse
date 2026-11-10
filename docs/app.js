@@ -129,12 +129,12 @@ function openCellSheet(cp, i) {
   const r = S.d.forecast[key(cp, S.dir)][i];
   const isToday = r.date === todayISO();
   const sp = S.d.spark[key(cp, S.dir)];
-  const ai = sp && sp.flow.length ? sp.flow.length - 1 : -1;   // latest ImmD actual
+  const ax = sp && sp.flow.length ? sp.flow.length - 1 : -1;   // latest ImmD actual
   openSheet(`<h3>${st.cn} ${st.cp}</h3>
     <div class="sub">${r.date}（周${DOW[r.dow]}）${isToday ? " · 今天" : ""} · ${DIR_CN[S.dir]} · ${r.festive ? "节日期 " + r.festive : "非节日"}</div>
     ${chip(r.level)}
     <div class="kv"><span>预计过关人次</span><b class="num">${fmtN(r.base)}</b></div>
-    ${ai >= 0 ? `<div class="kv"><span>最近实测（${sp.dates[ai]}）</span><b class="num">${fmtN(sp.flow[ai])}</b></div>` : ""}
+    ${ax >= 0 ? `<div class="kv"><span>最近实测（${sp.dates[ax]}）</span><b class="num">${fmtN(sp.flow[ax])}</b></div>` : ""}
     <div class="kv"><span>人流可能范围（八成日子在内）</span><b class="num">${fmtK(r.lo)} – ${fmtK(r.hi)}</b></div>
     <div class="kv"><span>拥挤概率</span><b class="num">${pct(r.p_busy)}</b></div>
     ${mkBlock(r)}
@@ -458,7 +458,7 @@ function renderPoi() {
   }
   const pretty = (t) => (t.startsWith("NOT_") ? "not·" + t.slice(4) : t);
   let h = `<p class="hint" style="margin:2px 0 10px">
-    用 AI 读了 <b>${fmtN(nlp.train_reviews)}</b> 条真实游客评论（TripAdvisor 景点点评），自动判断每条是好评还是差评，
+    逐条分析了 <b>${fmtN(nlp.train_reviews)}</b> 条真实游客评论（TripAdvisor 景点点评），自动判断每条是好评还是差评，
     据此为 12 个香港景点排出好评率——口岸人多的日子，挑个口碑好、相对清闲的去处。
     香港景点的评论为<b>演示用示例</b>（详见「关于」页；判断模型只用真实评论训练，留出测试准确率 <b>${pct(nlp.acc)}</b>）。</p>`;
   nlp.attractions.forEach((a, i) => {
@@ -470,7 +470,7 @@ function renderPoi() {
       <div class="advice">💡 ${a.tip}</div>
     </div>`;
   });
-  h += `<p class="hint">好评率 = AI 判为好评的评论占比；
+  h += `<p class="hint">好评率 = 判为好评的评论占比；
     高亮词是该景点好评里最有代表性的用词；「not·词」表示否定语气（例如 not·worth =「不值得」）。</p>`;
   el.innerHTML = h;
 }
