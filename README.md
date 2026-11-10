@@ -19,7 +19,7 @@ Erlang-C + Monte Carlo, TF-IDF + logistic regression. scikit-learn is used
 |---|---|
 | **日历 Calendar** | 14-day × 8-port congestion heatmap (self-calibrated quartile bands). Tap a day: expected flow with P10–P90 band, P(busy), Markov state probabilities, latest published actual, and an hourly strip with the best 2-hour window to cross. |
 | **对比 Compare** | All ports side by side for a chosen date: weekday base, P85/P95, 60-day sparkline, ×-multiple vs the busiest port, and a switch recommendation. |
-| **风险 Risk** | Monte Carlo queue simulation (3,000 trials) running live in the browser: Erlang-C waits below saturation, capped triangular dwell above; outputs P(wait > 30 min), median and P95. |
+| **排队 Queue** | Monte Carlo queue simulation (3,000 trials) running live in the browser: Erlang-C waits below saturation, capped triangular dwell above; plain-language output tiles — P(wait > 30 min), median, 95th-percentile wait. UI copy is deliberately non-technical (product for travellers); method names live in the 关于 tab and the report. |
 | **景点 Attractions** | Off-peak alternatives ranked by TF-IDF + logistic-regression sentiment trained on 161k real TripAdvisor reviews, with per-attraction top terms (negation-aware) and crowd-level tips. |
 
 Everything works **offline** after first load — service worker caches the shell

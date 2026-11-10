@@ -105,7 +105,7 @@ function renderCal() {
   for (let s = 0; s < n; s += 7) blocks += calBlock(cps, s, Math.min(7, n - s));
   el.innerHTML = `<div class="row">${segDir("seg-cal")}${legend()}</div>`
     + blocks
-    + `<p class="hint">点按格子看详情 · 深色描边格 = 今天 · 色档由各口岸自身 P50/P85/P95 分位标定（复关后数据）</p>`;
+    + `<p class="hint">点按格子看当天详情 · 粗边格 = 今天 · 颜色代表拥挤程度，按每个口岸自己的客流水平分级</p>`;
   bindSeg("seg-cal");
   el.addEventListener("click", (e) => {
     const c = e.target.closest(".cell");
@@ -119,8 +119,8 @@ function mkBlock(r) {
   if (!r.mk || !r.mk.length) return "";
   const segs = r.mk.map((p, i) => (p > 0.004 ? `<i class="g${i + 1}" style="width:${(p * 100).toFixed(1)}%"></i>` : "")).join("");
   const lg = r.mk.map((p, i) => `<span><i class="g${i + 1}"></i>${LV[i].cn} ${pct(p)}</span>`).join("");
-  return `<div class="kv"><span>马尔可夫状态概率 Markov states</span></div>
-    <div class="mkbar" role="img" aria-label="马尔可夫状态概率">${segs}</div>
+  return `<div class="kv"><span>按历史规律推算</span></div>
+    <div class="mkbar" role="img" aria-label="按历史规律推算的拥堵概率">${segs}</div>
     <div class="mklg">${lg}</div>`;
 }
 
@@ -133,12 +133,12 @@ function openCellSheet(cp, i) {
   openSheet(`<h3>${st.cn} ${st.cp}</h3>
     <div class="sub">${r.date}（周${DOW[r.dow]}）${isToday ? " · 今天" : ""} · ${DIR_CN[S.dir]} · ${r.festive ? "节日期 " + r.festive : "非节日"}</div>
     ${chip(r.level)}
-    <div class="kv"><span>预计客流 Expected flow</span><b class="num">${fmtN(r.base)}</b></div>
-    ${ai >= 0 ? `<div class="kv"><span>最近实测 Actual（${sp.dates[ai]}）</span><b class="num">${fmtN(sp.flow[ai])}</b></div>` : ""}
-    <div class="kv"><span>区间 P10–P90</span><b class="num">${fmtK(r.lo)} – ${fmtK(r.hi)}</b></div>
-    <div class="kv"><span>繁忙概率 P(Busy)</span><b class="num">${pct(r.p_busy)}</b></div>
+    <div class="kv"><span>预计过关人次</span><b class="num">${fmtN(r.base)}</b></div>
+    ${ai >= 0 ? `<div class="kv"><span>最近实测（${sp.dates[ai]}）</span><b class="num">${fmtN(sp.flow[ai])}</b></div>` : ""}
+    <div class="kv"><span>人流可能范围（八成日子在内）</span><b class="num">${fmtK(r.lo)} – ${fmtK(r.hi)}</b></div>
+    <div class="kv"><span>拥挤概率</span><b class="num">${pct(r.p_busy)}</b></div>
     ${mkBlock(r)}
-    <div class="kv"><span>该口岸分位带 P50/P85/P95</span><b class="num small">${fmtK(st.q["50"])} / ${fmtK(st.q["85"])} / ${fmtK(st.q["95"])}</b></div>
+    <div class="kv"><span>本口岸参考（平日/偏忙/高峰）</span><b class="num small">${fmtK(st.q["50"])} / ${fmtK(st.q["85"])} / ${fmtK(st.q["95"])}</b></div>
     ${hourlyBlock(st, r)}`);
 }
 
@@ -211,15 +211,15 @@ function hourlyBlock(st, r) {
     ? ` · <b>现在 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}</b>` : "";
   const pkState = !isToday ? "" : nowH >= pk.h + 1 ? "（已过）" : nowH >= pk.h ? "（现在）" : "";
 
-  return `<div class="hr">分时段预测 · 逐小时（${fmtOpen(o)}–${fmtOpen(cH)} 通关）${nowTag}</div>
+  return `<div class="hr">几点出发最顺 · 逐小时（${fmtOpen(o)}–${fmtOpen(cH)} 通关）${nowTag}</div>
     <div class="hwrap"><div class="hours" role="img" aria-label="逐小时客流与排队风险">${bars}</div>${nowLine}</div>
     <div class="haxis">${axis}</div>
     <div class="advice" style="margin-top:8px">
-      峰值 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>${pkState}（约 ${fmtK(pk.lam * 60)} 人次/时 · <span class="nw">P(排队&gt;30min)≈${pct(pk.p30)}</span>）<br>
+      高峰 <b>${fmtH(pk.h)}–${fmtH(pk.h + 1)}</b>${pkState}（约 ${fmtK(pk.lam * 60)} 人次/时 · <span class="nw">排队超 30 分钟概率约 ${pct(pk.p30)}</span>）<br>
       ${best ? `${ahead ? "接下来" : "最顺"} <b>${fmtH(best.h)}–${fmtH(best.h + 2)}</b>，建议此时段出发` : ""}
     </div>
-    <p class="hint">小时曲线为模型估计（口岸类型模板 × 当日总量，ImmD 仅公布日频数据），非实测；
-    色档按 P(排队&gt;30min) &lt;5% / &lt;25% / &lt;60% 划分，含对数正态流量不确定性（σ 自标定）。</p>`;
+    <p class="hint">逐小时曲线为模型估算（入境处只公布每日总数，没有分时官方数据），非实测；
+    颜色代表该时段排队超过 30 分钟的风险：绿=很低 · 黄=较低 · 橙=偏高 · 红=很高。</p>`;
 }
 
 /* deterministic per (cp, date, hour): the same day always renders the same
@@ -281,13 +281,13 @@ function renderCmp() {
       <div class="cmp-h"><div class="nm">${x.st.short} <span>${x.st.cn} · ${x.st.cp}</span></div>${chip(x.r.level)}</div>
       <div class="stats">
         <div><div class="v num">${fmtK(x.r.base)}</div><div class="k">预计人次</div></div>
-        <div><div class="v num">${pct(x.r.p_busy)}</div><div class="k">繁忙概率</div></div>
+        <div><div class="v num">${pct(x.r.p_busy)}</div><div class="k">拥挤概率</div></div>
         <div><div class="v num">${isBest ? "—" : relTxt(x.diff)}</div><div class="k">对比最佳</div></div>
       </div>
       <div class="meter"><i style="width:${Math.min(100, x.r.p_busy * 100)}%"></i></div>
       ${sp}
       <div class="advice">${isBest
-        ? `✅ 当日最佳选择 —— 预计 ${fmtN(x.r.base)} 人次，繁忙概率仅 ${pct(x.r.p_busy)}`
+        ? `✅ 当日最佳选择 —— 预计 ${fmtN(x.r.base)} 人次，拥挤概率仅 ${pct(x.r.p_busy)}`
         : `比 <b>${best.st.cn}</b> 多约 ${fmtN(x.r.base - best.r.base)} 人次（${relTxt(x.diff)}），建议优先考虑 <b>${best.st.cn}</b>`}</div>
     </div>`;
   });
@@ -393,9 +393,9 @@ function renderRiskResult() {
 
   $("#mc-out").innerHTML = `
     <div class="tiles">
-      <div class="tile"><div class="v num">${pct(p30)}</div><div class="k">P(排队 &gt; 30 min)</div></div>
-      <div class="tile"><div class="v num">${q(0.5).toFixed(1)}<span class="small"> min</span></div><div class="k">中位等待</div></div>
-      <div class="tile"><div class="v num">${q(0.95).toFixed(0)}<span class="small"> min</span></div><div class="k">P95 等待</div></div>
+      <div class="tile"><div class="v num">${pct(p30)}</div><div class="k">排队超 30 分钟概率</div></div>
+      <div class="tile"><div class="v num">${q(0.5).toFixed(1)}<span class="small"> min</span></div><div class="k">典型等待</div></div>
+      <div class="tile"><div class="v num">${q(0.95).toFixed(0)}<span class="small"> min</span></div><div class="k">基本不会超过</div></div>
     </div>
     <div class="card">
       <svg id="riskplot" viewBox="0 0 ${w} ${hgt}" role="img" aria-label="等待时间分布">
@@ -404,16 +404,15 @@ function renderRiskResult() {
           stroke-width="1.5" stroke-dasharray="5 4"/>
         <circle cx="${mx30}" cy="${ylab}" r="4" fill="var(--critical)"/>
         <text x="${Math.min(mx30 + 6, w - 90)}" y="${Math.max(pt + 10, ylab - 8)}" font-size="10"
-          fill="var(--ink)" font-weight="700">30 min 线：CDF ${pct(cdfAt30)}</text>
+          fill="var(--ink)" font-weight="700">30 分钟内排完：${pct(cdfAt30)}</text>
       </svg>
       <div class="legend small" style="margin-top:8px">
-        <span class="small">▮ 模拟等待分布（3000 次）</span><span class="small">— 累积概率 CDF</span>
+        <span class="small">▮ 排队时长分布（模拟 3000 次）</span><span class="small">— 不超过比例曲线</span>
       </div>
     </div>
-    <p class="hint">模型假设（v0.1 玩具排队层，正式版由实测清关数据标定）：M/M/c 排队 ·
-    日流量 12% 落于最忙 1 小时 · 柜台均值服务 30 秒 · 柜台数 c=${c}（按该口岸 P90 日流量 95% 利用率标定）·
-    需求超容量时按大厅滞留三角分布（20/45/120 min）建模 · 流量 ~ 对数正态（基线 ${fmtN(base)}/日，σ 自标定）·
-    容量锚 P95=${fmtN(cap)}/日。</p>`;
+    <p class="hint">说明：以上为简化排队模型的估算，演示用，实际以现场为准（正式版应由实测清关数据标定）。
+    主要假设：最忙 1 小时约占全天 12% 客流 · 每个柜台平均 30 秒办理一位 · 柜台数 ${c} 个（按该口岸历史高峰日的负荷估出）·
+    严重超出负荷时按大厅滞留 20–120 分钟估算 · 当日人次本身有随机波动（预计 ${fmtN(base)}，该口岸历史高峰日约 ${fmtN(cap)}）。</p>`;
 }
 
 function renderRisk() {
@@ -433,11 +432,11 @@ function renderRisk() {
           `<option value="${i}" ${i === S.dateIdx ? "selected" : ""}>${r.date}（周${DOW[r.dow]}${r.festive ? " · " + r.festive : ""}）</option>`).join("")}</select>
       </div>
       <div class="kv small" style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--grid)">
-        <span class="hint">基线客流 ${fmtN(S.d.forecast[key(S.cp, S.dir)][S.dateIdx].base)}/日</span>
-        <span class="hint">容量锚 P95 ${fmtN(st.q["95"])}/日</span></div>
-      <button class="runbtn" id="run">▶ 运行蒙特卡洛模拟（现场 3000 次）</button>
+        <span class="hint">预计当日 ${fmtN(S.d.forecast[key(S.cp, S.dir)][S.dateIdx].base)} 人次</span>
+        <span class="hint">历史高峰日约 ${fmtN(st.q["95"])} 人次</span></div>
+      <button class="runbtn" id="run">▶ 模拟这一天的排队（3000 次）</button>
     </div>
-    <div id="mc-out">${S.mc ? "" : '<p class="hint">选择口岸和日期，按上方按钮在浏览器里现场跑排队模拟。</p>'}</div>`;
+    <div id="mc-out">${S.mc ? "" : '<p class="hint">选好口岸和日期，点上方按钮模拟排队情况。</p>'}</div>`;
   el.innerHTML = h;
   bindSeg("seg-rk");
   $("#sel-cp").addEventListener("change", (e) => { S.cp = e.target.value; S.mc = null; renderRisk(); });
@@ -459,10 +458,9 @@ function renderPoi() {
   }
   const pretty = (t) => (t.startsWith("NOT_") ? "not·" + t.slice(4) : t);
   let h = `<p class="hint" style="margin:2px 0 10px">
-    自写 TF-IDF + 逻辑回归情感模型：以 <b>${fmtN(nlp.train_reviews)}</b> 条真实 TripAdvisor 景点评论训练
-    （留出测试 ${fmtN(nlp.test_reviews)} 条：准确率 <b>${pct(nlp.acc)}</b> / AUC <b>${nlp.auc.toFixed(2)}</b>；
-    sklearn 基准 ${pct(nlp.acc_sk)} / ${nlp.auc_sk.toFixed(2)}），再为 12 个香港景点的好评率排序。
-    香港景点评论为<b>演示用合成语料</b>（合成部分已在报告与关于页声明；模型仅用真实评论训练）。</p>`;
+    用 AI 读了 <b>${fmtN(nlp.train_reviews)}</b> 条真实游客评论（TripAdvisor 景点点评），自动判断每条是好评还是差评，
+    据此为 12 个香港景点排出好评率——口岸人多的日子，挑个口碑好、相对清闲的去处。
+    香港景点的评论为<b>演示用示例</b>（详见「关于」页；判断模型只用真实评论训练，留出测试准确率 <b>${pct(nlp.acc)}</b>）。</p>`;
   nlp.attractions.forEach((a, i) => {
     h += `<div class="card${i === 0 ? " pick" : ""}">
       <div class="cmp-h"><div class="nm">${a.cn} <span>${a.en}</span></div>
@@ -472,8 +470,8 @@ function renderPoi() {
       <div class="advice">💡 ${a.tip}</div>
     </div>`;
   });
-  h += `<p class="hint">评分为模型对评论的情感判断（好评率 = 判为正面评论的占比）；
-    高亮词为正面评论中 TF-IDF 权重最高的指示词（去除了景点名本身）；「not·词」表示否定语境中的词。</p>`;
+  h += `<p class="hint">好评率 = AI 判为好评的评论占比；
+    高亮词是该景点好评里最有代表性的用词；「not·词」表示否定语气（例如 not·worth =「不值得」）。</p>`;
   el.innerHTML = h;
 }
 
@@ -498,7 +496,7 @@ async function boot() {
   const sat = fs.findIndex((x) => x.dow === 5);
   S.dateIdx = sat >= 0 ? sat : 0;
   $("#meta").textContent =
-    `ImmD 数据至 ${S.d.data_through} · ${S.d.model ? "自写 GBT 预测 · " : ""}v${S.d.version}`;
+    `入境处数据更新至 ${S.d.data_through} · ${S.d.model ? "提前 14 天预测 · " : ""}v${S.d.version}`;
   renderCal();
   $("#tabbar").addEventListener("click", (e) => {
     const b = e.target.closest("button");
