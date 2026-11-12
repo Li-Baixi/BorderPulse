@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Sentiment engine for the off-peak attraction page — own implementation.
+Primary author: Lu Zengyi (TF-IDF + class-balanced LogReg, negation scope).
+
 
 Pipeline (all hand-written; scikit-learn appears only as an accuracy
 benchmark):

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Monte Carlo queue simulation for a border-control hall — own NumPy implementation.
+Primary author: Li Baixi (Erlang-C core, Monte Carlo layer).
+
 
 Model (identical constants to the live PWA so the two stay comparable):
   * daily flow F ~ LogNormal(ln mu, sigma)   (mu from the forecaster,

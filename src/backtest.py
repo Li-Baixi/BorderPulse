@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Rolling-origin backtest of the 14-day recursive forecast.
+Primary author: Li Baixi (rolling-origin protocol and analysis).
+
 
 Competitors:
   baseline  weekday-of-week median x festive multiplier (the v0.2 product model)

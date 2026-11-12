@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Panel construction + feature engineering for the GBT forecaster.
+Primary author: Lin Jingyu (series filters, 56-feature scheme, holiday calendar).
+
 
 One pooled panel over all 16 control-point x direction series (about 22k
 series-days since the 2023-02-06 reopening). Pooled training lets small

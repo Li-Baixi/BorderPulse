@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """First-order Markov chain over the 4 congestion states — own NumPy implementation.
+Primary author: Li Baixi (state chain, transition fitting).
+
 
 States are the product's own congestion bands (1 Smooth / 2 Normal / 3 Busy /
 4 Packed), cut at each series' own P50/P85/P95 daily flow. The chain gives a

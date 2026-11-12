@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """BorderPulse docs builder — v0.3 model-driven pipeline.
+Primary authors: Lin Jingyu (data pipeline), Li Baixi (model integration), Lu Zengyi (front-end data contract).
+
 
 Reads data/raw/immd_daily.csv and writes docs/data.json for the static PWA:
 

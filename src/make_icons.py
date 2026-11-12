@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Generate PWA icons (rounded square, pulse-line mark) into docs/icons/."""
+"""Generate PWA icons (rounded square, pulse-line mark) into docs/icons/.
+
+Primary author: Lu Zengyi (product icon set).
+"""
+
 import os
 
 from PIL import Image, ImageDraw

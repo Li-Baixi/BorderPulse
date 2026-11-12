@@ -1,4 +1,5 @@
 /* BorderPulse — v0.3.7 UI (languages: 简体 / 繁體 / English, switchable in the app bar).
+   Primary author: Lu Zengyi (front end, trilingual UI, accessibility pass).
    Data: docs/data.json built by src/build_docs.py (ImmD daily passenger traffic).
    Forecast: own NumPy histogram GBT (LOF-cleaned training), recursive 14 days;
    bands self-calibrated P50/85/95/99; per-day Markov 4-state distribution.

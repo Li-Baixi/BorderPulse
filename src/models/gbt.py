@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Gradient-boosted regression trees, hand-written NumPy.
+Primary author: Li Baixi (histogram GBT, early stopping, pooled training).
+
 
 This is the project's primary forecasting model (course rule: the main
 implementation must be ours; scikit-learn appears only as a benchmark).

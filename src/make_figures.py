@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """EDA + model figures for the report (English labels, PNG into report/figs).
+Primary author: Li Baixi (evaluation figures); EDA panels Lin Jingyu.
+
 
 Reuses the project's own implementations (no new modelling):
   fig01  16-series panel overview with the 2023-02-06 reopening break

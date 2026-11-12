@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Local Outlier Factor (Breunig et al., SIGMOD 2000) — own NumPy implementation.
+Primary author: Lin Jingyu (anomaly cleaning / two-gate design).
+
 
 Used to flag anomalous border-crossing days (typhoon closures, system outages,
 data glitches) before fitting the forecaster, so the model trains on days that
