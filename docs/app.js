@@ -5,9 +5,25 @@
    bands self-calibrated P50/85/95/99; per-day Markov 4-state distribution.
    Day sheet: intraday hour-of-day model (class templates x Erlang-C queue per hour).
    Queue tab: Monte Carlo over an M/M/c toy queue (Erlang-C), runs fully client-side.
-   POI tab: TF-IDF + logistic-regression sentiment ranking from docs/nlp.json. */
+   POI tab: TF-IDF + logistic-regression sentiment ranking from docs/nlp.json.
+
+   【中文说明 —— 前端主程序】
+   这是单页应用（PWA）的全部交互逻辑，无框架、无构建步骤，直接由
+   index.html 引入。数据只 fetch 一次（docs/data.json，由
+   src/build_docs.py 离线生成），之后所有计算都在浏览器里完成。
+   五个页签：
+     日历 cal   —— 14 天 × 8 口岸拥挤热力图，点格子弹出当日详情
+     对比 cmp   —— 选定一天，8 个口岸并排比较并给出当日最佳
+     排队 risk  —— 蒙特卡洛排队模拟（Erlang-C + 饱和三角分布，纯前端）
+     景点 poi   —— 情感分析排序的错峰景点（数据来自 nlp.json）
+     关于 about —— 三语静态说明页（ABOUT 字典整段渲染）
+   文件结构（自上而下）：i18n 词典 → 状态与小工具 → 日历 → 日内模型 →
+   对比 → 排队模拟 → 景点 → 弹层 → 启动流程。 */
 
 /* ---------------- i18n ---------------- */
+/* 中文：三语词典。T 的每个条目是 [简体, 繁體, English] 三元组；
+   需要拼变量的条目写成函数（调用时传 live 值）。
+   LANG 存在 localStorage("bp-lang")，刷新后保持。 */
 let LANG = "sc";
 try { const l = localStorage.getItem("bp-lang"); if (l === "tc" || l === "en") LANG = l; } catch (e) {}
 const LI = () => (LANG === "tc" ? 1 : LANG === "en" ? 2 : 0);
@@ -72,6 +88,8 @@ const T = {
   refresh: ["刷新", "刷新", "Refresh"],
 };
 const t = (k, ...a) => {
+  /* 中文：取词条。k 是键名；子词典（如 tab 标签）第一个参数是子键。
+     返回值若是函数则立即以剩余参数调用（支持插值）。 */
   let e = T[k];
   if (!e) return k;
   if (!Array.isArray(e)) { e = e[a.shift()]; if (!e) return k; }   // keyed sub-dictionaries (tab labels)
@@ -80,6 +98,8 @@ const t = (k, ...a) => {
 };
 
 /* control-point display names per language (stats keys use the short code) */
+/* 中文：口岸显示名（三语）。data.json 的键用短代码（LoWu/LMC…），
+   CPN 负责把短代码翻成各语言的显示名。 */
 const CPN = {
   LoWu: ["罗湖", "羅湖", "Lo Wu"],
   "LMC-Spur": ["落马洲支线", "落馬洲支線", "Lok Ma Chau Spur"],
@@ -93,6 +113,8 @@ const CPN = {
 const cpn = (short) => (CPN[short] ? CPN[short][LI()] : short);
 
 /* POI traditional names + tips (data.json carries simplified tips) */
+/* 中文：景点的繁体名与繁/英贴士（data.json 只带简体贴士，
+   这里做显示层的语言映射）。poiName/poiTip 按当前语言取值。 */
 const POI_TC = {
   "Hong Kong Disneyland": "香港迪士尼", "Big Buddha & Ngong Ping 360": "天壇大佛 · 昂坪360",
   "M+ Museum, West Kowloon": "M+ 博物館", "Victoria Peak & Peak Tram": "太平山頂",
@@ -234,6 +256,9 @@ const ABOUT = {
 };
 
 /* ---------------- state & helpers ---------------- */
+/* 中文：全局状态 S —— d=数据(data.json)、dir=方向、tab=当前页签、
+   dateIdx=选中天数组下标、cp=选中口岸、mc=最近一次模拟结果。
+   LV = 4 档拥挤等级（级别/样式类/符号/三语名）。 */
 const S = { d: null, dir: "Departure", tab: "cal", dateIdx: 0, cp: "LoWu", mc: null };
 
 const LV = [
@@ -259,11 +284,15 @@ const lv = (n) => LV[n - 1];
 
 function cpOrder(dir) {
   // fixed row order by typical flow (P50 of the direction), largest first
+  // 中文：口岸行的固定排序——按该方向的中位客流（P50）从大到小，
+  // 大口岸永远在上、位置不随页签变化（减少视觉跳动）。
   return Object.values(S.d.stats).filter((s) => s.dir === dir)
     .sort((a, b) => b.q["50"] - a.q["50"]).map((s) => s.short);
 }
 
 /* ---------------- language switch ---------------- */
+/* 中文：切换语言。写 localStorage → 更新 <html lang>（无障碍/字体）→
+   重渲标题与全部界面。EN 模式下品牌副标题隐藏（品牌词太长）。 */
 function setLang(l) {
   if (l !== "sc" && l !== "tc" && l !== "en") return;
   LANG = l;
@@ -340,6 +369,9 @@ function todayISO() {
 }
 
 /* ---------------- calendar heatmap ---------------- */
+/* 中文：日历热力图。一次渲染一周（calBlock），周与周叠成块。
+   每格是 <button>（键盘可达），aria-label 带口岸/日期/档位；
+   周末格加 we 样式、今天格加粗边框（today）。 */
 function calBlock(cps, start, count) {
   const day = (i) => S.d.forecast[key(cps[0], S.dir)][i];
   const range = `${day(start).date.slice(5).replace("-", "/")} – ${day(start + count - 1).date.slice(5).replace("-", "/")}`;
@@ -379,6 +411,9 @@ function renderCal() {
 
 /* Markov 4-state distribution row (r.mk = [p1..p4], from the state chain
    stepped from the last actual day to this date) */
+/* 中文：马尔可夫档位分布条——详情弹层里的四段彩色概率条。
+   r.mk = [p1..p4]（自最近实测日起推到该天），宽度即概率，
+   <0.4% 的段不渲染。 */
 function mkBlock(r) {
   if (!r.mk || !r.mk.length) return "";
   const segs = r.mk.map((p, i) => (p > 0.004 ? `<i class="g${i + 1}" style="width:${(p * 100).toFixed(1)}%"></i>` : "")).join("");
@@ -408,6 +443,10 @@ function openCellSheet(cp, i) {
 }
 
 /* ---------------- intraday (hour-of-day) model ---------------- */
+/* 中文：日内（逐小时）模型。ImmD 不公布分时数据，这里用"口岸类型
+   模板曲线 × 每小时 Erlang-C 排队"估算：
+   小时客流 = 当日预测 × 模板权重；每小时算 P(排队>30 分钟) 上色。
+   模板/开放时间来自 data.json（build_docs.py 的 TEMPLATES/OPEN）。 */
 const fmtH = (h) => String(h).padStart(2, "0") + ":00";
 const fmtOpen = (t) => {
   const h = Math.floor(t), m = Math.round((t - h) * 60);
@@ -421,6 +460,8 @@ function dayType(r) {
 
 function hourlyWeights(st, r) {
   /* class template masked to this CP's clearing hours, normalised to sum 1 */
+  /* 中文：取出该(口岸类型, 方向, 日类型)的模板曲线，裁剪到该口岸
+     实际开放的小时段（闭馆小时权重清零），再归一化到和为 1。 */
   const tpl = S.d.intraday.templates[st.profile][st.dir][dayType(r)];
   const [o, c] = S.d.intraday.open[st.short];
   const lo = Math.floor(o), hi = Math.ceil(c) - 1;
@@ -430,6 +471,11 @@ function hourlyWeights(st, r) {
 }
 
 function hourlyBlock(st, r) {
+  /* 中文：详情弹层里的"几点出发最顺"块。逐小时算排队风险后：
+     - 找峰值小时（λ 最大）→ "高峰"提示行
+     - 找 8-21 点里风险最低的连续 2 小时 → 高亮为最佳时段
+       （看的是今天 → 只考虑当前时刻之后的小时）
+     渲染为 24 根彩色竖条 + "现在"指示线。柜台数标定与排队页一致。 */
   const w = hourlyWeights(st, r);
   const MU = 2, T = 30;                       // service 1/2 per min per counter, 30-min line
   const q90 = 0.5 * (st.q["85"] + st.q["95"]);
@@ -488,6 +534,9 @@ function hourlyBlock(st, r) {
 
 /* deterministic per (cp, date, hour): the same day always renders the same
    numbers, so reopening a sheet never contradicts the previous look */
+/* 中文：确定性随机源——种子由 (口岸, 日期, 小时) 哈希得到。
+   好处：同一天不管打开多少次，逐小时数字完全一致，不会"上次看 37%
+   这次看 41%"自相矛盾。mulberry32 是轻量 PRNG。 */
 function hash32(s) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -506,6 +555,10 @@ function pWait30(lam, c, sigma, seed) {
   /* P(wait > 30 min) at an M/M/c counter fed by a lognormal-uncertain arrival
      rate: analytic Erlang-C tail per draw, saturated draws use the same
      triangular-dwell cap as the Monte Carlo tab (20/45/120 min -> P=.96). */
+  /* 中文：某小时的 P(排队>30 分钟)。200 次确定性抽样：
+     每次抽一个对数正态到达率 → 未饱和用 Erlang-C 尾概率解析式
+     exp(-(c·MU-λ)·30)，饱和（ρ≥0.97）按三角滞留取 0.96。
+     与排队页同一套常数，只是解析式替代了直方图模拟。 */
   const MU = 2, T = 30, N = 200, rnd = mulberry32(seed);
   let acc = 0;
   for (let t = 0; t < N; t++) {
@@ -518,6 +571,9 @@ function pWait30(lam, c, sigma, seed) {
 }
 
 /* ---------------- compare ---------------- */
+/* 中文：对比页。选定一天 → 8 个口岸按"最顺"排序成卡片，每张带
+   三块数字瓦片（预计人次/拥挤概率/相对最佳）、风险进度条和
+   近 60 天 spark 折线；当日最佳卡片加高亮边框。 */
 function renderCmp() {
   const el = $("#v-cmp");
   const cps = cpOrder(S.dir);
@@ -565,6 +621,7 @@ function renderCmp() {
 }
 
 function spark(k) {
+  /* 中文：近 60 天客流 spark 迷你折线（SVG，末点加圆点标记最新值）。 */
   const s = S.d.spark[k];
   if (!s) return "";
   const w = 440, hgt = 44, pad = 3;
@@ -582,8 +639,14 @@ function spark(k) {
 }
 
 /* ---------------- risk (Monte Carlo queue) ---------------- */
+/* 中文：排队页——浏览器里跑的蒙特卡洛排队模拟（与后端 mc_queue.py
+   同一套模型和常数）。流程：抽 3000 个"可能的当天客流"（对数正态）
+   → 最忙小时到达率 λ → 未饱和用 Erlang-C 稳态均值，饱和用三角
+   滞留封顶 → 出直方图 + 累计曲线 + 三块数字瓦片。 */
 function erlangC(c, rho) {
   /* P(all servers busy), M/M/c; rho = offered erlangs / c. Iterative, O(c). */
+  /* 中文：Erlang-C——M/M/c 系统里"所有柜台都忙"的概率。
+     递推算泊松项之和，避免大数阶乘。与 src/models/mc_queue.py 相同。 */
   const a = rho * c;
   let sum = 1, term = 1;
   for (let i = 1; i < c; i++) { term *= a / i; sum += term; }
@@ -592,6 +655,11 @@ function erlangC(c, rho) {
 }
 
 function runMC() {
+  /* 中文：跑一次模拟（点"模拟这一天的排队"触发）。逐次抽样：
+     Box-Muller 变换抽标准正态 → 日客流 = 预测 × exp(σz)（对数正态）
+     → λ = 日客流 × 12% / 60（每分钟）→ ρ = λ/(c·MU) 分流：
+     ρ<0.97 走 Erlang-C 稳态平均等待；否则三角分布(20/45/120)封顶。
+     结果排序后存 S.mc（renderRiskResult 消费）。 */
   const k = key(S.cp, S.dir);
   const st = S.d.stats[k], f = S.d.forecast[k][S.dateIdx];
   const MU = 2;                    // service rate per counter, 1/min (30 s mean)
@@ -599,6 +667,8 @@ function runMC() {
   const PEAK_MIN = 60, TRIALS = 3000, CAP = 120;
 
   /* counters calibrated so the P90 historical day runs at 95% utilization */
+  /* 中文：柜台数标定——让历史 P90 日（取 P85/P95 中点）恰好 95% 利用率，
+     至少 4 个。q90 用两个分位数的中点而非真 P90，避免前端重算百分位。 */
   const q90 = 0.5 * (st.q["85"] + st.q["95"]);
   const load90 = (q90 * PEAK_SHARE / PEAK_MIN) / MU;
   const c = Math.max(4, Math.ceil(load90 / 0.95));
@@ -624,6 +694,8 @@ function runMC() {
 }
 
 function renderRiskResult() {
+  /* 中文：渲染模拟结果——三块瓦片（超 30 分钟概率/典型等待/P95）、
+     0-120 分钟 24 桶直方图 + 累计"排完"曲线（CDF）、30 分钟参考线。 */
   const { wq } = S.mc;
   const q = (p) => wq[Math.min(wq.length - 1, Math.floor(p * wq.length))];
   const p30 = wq.filter((x) => x > 30).length / wq.length;
@@ -679,6 +751,8 @@ function renderRiskResult() {
 }
 
 function renderRisk() {
+  /* 中文：排队页框架——口岸/日期两个下拉 + 估算提示行 + 运行按钮。
+     改口岸或日期会清掉上次模拟（S.mc=null）逼用户重跑（参数变了）。 */
   const el = $("#v-risk");
   const cps = cpOrder(S.dir);
   const days = S.d.forecast[key(cps[0], S.dir)];
@@ -712,6 +786,9 @@ function renderRisk() {
 }
 
 /* ---------------- POI: sentiment-ranked off-peak attractions ---------------- */
+/* 中文：景点页——按好评率排序的 12 个景点卡片（好评率大数字 + 进度条 +
+   指示关键词标签 + 错峰贴士）。NOT_ 前缀显示为 "not·"（否定标记）。
+   数据来自 data.json 里合并的 nlp 段。 */
 function renderPoi() {
   const el = $("#v-poi");
   const nlp = S.d.nlp;
@@ -735,6 +812,8 @@ function renderPoi() {
 }
 
 /* ---------------- sheet ---------------- */
+/* 中文：底部弹层（详情 sheet）。openSheet 填充内容并加 show 类滑入；
+   点背景或 ✕ 关闭。 */
 function openSheet(html) {
   $("#sheet").innerHTML = `<i class="grab" aria-hidden="true"></i><button class="close" aria-label="${t("closeAria")}">✕</button>` + html;
   $("#sheet-bg").classList.add("show");
@@ -746,6 +825,11 @@ function closeSheet() {
 }
 
 /* ---------------- boot ---------------- */
+/* 中文：启动流程。设 <html lang> → fetch data.json（唯一网络请求）→
+   默认选中第一个口岸和最近的周六（周末最有决策场景）→ 首渲染 →
+   挂一次性事件委托（后续渲染只替换 innerHTML，监听不重复绑）。
+   Service Worker：HTTPS/localhost 下注册；新版本接管时弹一键刷新
+   提示（首次安装静默，不打扰访客）。 */
 async function boot() {
   document.documentElement.lang = LANG === "tc" ? "zh-HK" : LANG === "en" ? "en" : "zh-CN";
   document.title = t("title");

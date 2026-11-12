@@ -1,6 +1,13 @@
 /* BorderPulse PWA — design tokens from the validated reference palette.
    Light/dark swap in one place; components reference roles only. */
 
+/* 中文：全局样式 —— 设计令牌（tokens）+ 各组件样式。
+   组织方式：所有颜色/阴影都定义在 :root 的 CSS 变量里（亮色），
+   暗色模式只在 prefers-color-scheme: dark 里覆盖同名变量；
+   组件一律引用变量（角色），不写死颜色 → 换主题只动一处。
+   四档拥挤色 good/warning/serious/critical 是全应用统一的"状态色"，
+   与日历格、等级章、马尔可夫条、逐小时条共用。 */
+
 :root {
   color-scheme: light;
   --page:        #f9f9f7;
@@ -25,6 +32,8 @@
   --shadow:      0 1px 3px rgba(11, 11, 11, 0.08), 0 4px 14px rgba(11, 11, 11, 0.06);
 }
 @media (prefers-color-scheme: dark) {
+  /* 中文：暗色模式 —— 跟随系统，只覆盖需要变的变量
+     （页面/表面/文字/边框/强调色/阴影）。 */
   :root {
     color-scheme: dark;
     --page:      #0d0d0d;
@@ -44,6 +53,7 @@
 button { appearance: none; -webkit-appearance: none; }
 
 /* keyboard focus and touch press feedback */
+/* 中文：键盘焦点高亮（无障碍）+ 按下缩放反馈（触屏手感） */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button:active:not(:disabled) { transform: scale(0.96); }
 
@@ -60,6 +70,8 @@ html, body {
 #app { max-width: 520px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ---------- app bar ---------- */
+/* 中文：顶部应用栏 —— sticky 吸顶 + 毛玻璃背景；
+   环境安全区 inset 兼容刘海屏。 */
 #appbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 10px;
@@ -85,6 +97,7 @@ html, body {
 main { flex: 1; padding: 14px 14px 90px; }
 
 /* ---------- bottom tab bar ---------- */
+/* 中文：底部导航 —— fixed 悬浮 + 毛玻璃，安全区 padding。 */
 #tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
   display: flex; justify-content: center; gap: 4px;
@@ -125,6 +138,8 @@ main { flex: 1; padding: 14px 14px 90px; }
 .small { font-size: 12.5px; }
 
 /* status chips: icon + label together, never color alone */
+/* 中文：等级章 —— 图标(✓●▲◆)+文字一起出现，绝不只靠颜色
+   区分（色觉无障碍）；lv1-lv4 对应畅顺/正常/繁忙/爆满。 */
 .chip {
   display: inline-flex; align-items: center; gap: 5px;
   border-radius: 999px; padding: 2px 10px 2px 8px;
@@ -141,6 +156,9 @@ main { flex: 1; padding: 14px 14px 90px; }
 .legend .chip { padding: 2px 9px 2px 7px; }
 
 /* ---------- calendar heatmap ---------- */
+/* 中文：日历热力图 —— CSS grid：第一列 76px 口岸名 + 7 列日期格。
+   g1-g4 = 四档底色；we = 周末格（页色描边区分）；
+   today = 今天（双层 box-shadow 画粗环）。 */
 .calblock { margin-bottom: 16px; }
 .caltitle { font-size: 12px; color: var(--muted); margin-bottom: 4px; padding-left: 2px; }
 .cal {
@@ -175,6 +193,8 @@ html[lang="en"] .cal .cp { white-space: normal; font-size: 10.5px; line-height: 
 .cal .cell.today { box-shadow: inset 0 0 0 2px var(--page), inset 0 0 0 4px var(--ink); }
 
 /* ---------- compare cards ---------- */
+/* 中文：对比页卡片 —— 头部(名+等级章)/三块数字瓦片(stats)/
+   风险进度条(meter)/spark 折线/建议行(advice)；最佳卡片 .pick 描边。 */
 .cmp-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
 .cmp-h .chip { white-space: nowrap; flex-shrink: 0; }
 .cmp-h .nm { font-weight: 700; min-width: 0; }
@@ -192,6 +212,7 @@ html[lang="en"] .cal .cp { white-space: normal; font-size: 10.5px; line-height: 
 .advice b { color: var(--accent); }
 
 /* date chips: right-edge fade hints the row scrolls */
+/* 中文：日期条 —— 横向滚动，右缘渐隐（mask）暗示还能滑。 */
 .dates {
   display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px;
   -webkit-mask-image: linear-gradient(to right, var(--mask-ink) 0, var(--mask-ink) calc(100% - 16px), transparent 100%);
@@ -207,6 +228,7 @@ html[lang="en"] .cal .cp { white-space: normal; font-size: 10.5px; line-height: 
 .dates button.on small { color: var(--accent-ink); }
 
 /* ---------- risk tab ---------- */
+/* 中文：排队页 —— 下拉框/运行按钮/三块结果瓦片(tiles)/SVG 图。 */
 select, .sel {
   font: inherit; font-size: 13px; color: var(--ink);
   background: var(--surface); border: 1px solid var(--border);
@@ -232,6 +254,8 @@ select, .sel {
 .flowline b { color: var(--accent); }
 
 /* ---------- hourly strip in the day sheet ---------- */
+/* 中文：弹层里的逐小时条 —— 24 根竖条按风险上色(g1-g4)，
+   闭馆小时 .off 灰条；best = 最佳时段描边；nowline = "现在"指示线。 */
 .hr { font-size: 12px; color: var(--muted); margin: 14px 0 2px; }
 .hr b { color: var(--ink); }
 .hwrap { position: relative; }
@@ -253,6 +277,7 @@ select, .sel {
 .nw { white-space: nowrap; }
 
 /* ---------- Markov state bar (day sheet) ---------- */
+/* 中文：马尔可夫档位分布 —— 四段彩条(mkbar，宽度=概率) + 图例(mklg)。 */
 .mkbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 4px 0 6px; }
 .mkbar i { height: 100%; }
 .mklg { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11.5px; color: var(--ink-2); margin-bottom: 4px; }
@@ -264,6 +289,7 @@ select, .sel {
 .mkbar i.g4, .mklg i.g4 { background: var(--critical); }
 
 /* ---------- POI tab ---------- */
+/* 中文：景点页 —— 指示关键词的圆角标签(terms)。 */
 .terms { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 8px; }
 .terms span {
   font-size: 11.5px; color: var(--ink-2);
@@ -272,6 +298,7 @@ select, .sel {
 }
 
 /* ---------- bottom sheet ---------- */
+/* 中文：底部弹层 —— 背景(scrim 渐显) + 面板(translateY 滑入滑出)。 */
 #sheet-bg {
   position: fixed; inset: 0; z-index: 40; background: var(--scrim);
   opacity: 0; pointer-events: none; transition: opacity 0.18s;
@@ -298,6 +325,7 @@ select, .sel {
 @keyframes sp { to { transform: rotate(360deg); } }
 
 /* update toast */
+/* 中文：新版本提示 toast —— SW 更新接管时弹出（app.js 动态创建）。 */
 #toast {
   position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 60;
   transform: translate(-50%, 16px);
@@ -315,6 +343,7 @@ select, .sel {
 }
 
 /* respect reduced-motion: no sheet slide, toast fade or spinner spin */
+/* 中文：无障碍 —— 用户系统开了"减少动态效果"时，关掉所有动画。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

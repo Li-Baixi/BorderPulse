@@ -17,8 +17,23 @@ Reuses the project's own implementations (no new modelling):
   fig11  NLP: attraction ranking + own-vs-sklearn metrics
 
 Run:  python src/make_figures.py        (~3 min: refits HistGBR for fig06)
+
+【中文说明 —— 报告图表生成器（共 12 张 PNG，输出到 report/figs/）】
+作用：为书面报告生成全部图表（英文标签）。全部复用项目自己的模型
+实现，不引入新的建模逻辑：
+  fig01  16 条序列总览 + 2023-02-06 复关断点
+  fig02  罗湖出境在复关前后的周中位数对比
+  fig03  节假日系数（客流/星期中位数）按假期×阶段×方向
+  fig04  LOF 分数时间线 + 被标记的异常日（台风验证）
+  fig05  滚动回测：基线 vs 自写 GBT vs sklearn + 分序列 RMSE
+  fig06  GBT 分裂增益特征重要性（独热族合并显示）
+  fig07  14 天递归预测扇形图（直接读产品 docs/data.json）
+  fig08  马尔可夫转移矩阵 + h 步档位分布
+  fig09  蒙特卡洛排队等待分布（P90 日）
+  fig10  日内分时模板（口岸类型 × 方向）
+  fig11  NLP：景点排序 + 自写 vs sklearn 指标
+运行：python src/make_figures.py（约 3 分钟：fig06 需要重训 HistGBR）
 """
-import datetime as dt
 import json
 import os
 import sys
@@ -32,7 +47,7 @@ import matplotlib.dates as mdates
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from models.features import Panel, REOPEN, FEATURE_NAMES, load_panel
-from models.lof import flag_anomalies, LOF
+from models.lof import flag_anomalies
 from models.gbt import HistGBR
 from models.markov import fit_transition, forecast_dist, state_of, stationary
 from models import mc_queue
@@ -45,6 +60,8 @@ RAW = os.path.join(ROOT, "data", "raw", "immd_daily.csv")
 FIGS = os.path.join(ROOT, "report", "figs")
 
 # palette (validated categorical trio for model comparisons: ours / baseline / sklearn)
+# 中文：配色——模型对比的三色组（自写/基线/sklearn）已通过色觉无障碍
+# 验证；灰只作参考线装饰、绝不作数据系列色；四档拥挤色与前端一致。
 BLUE, BASE, ORANGE = "#2a78d6", "#b0568f", "#c96a2b"
 GRAY = "#898781"          # reference lines / decoration only, never a series
 GOOD, WARN, SERI, CRIT = "#0ca30c", "#fab219", "#ec835a", "#d03b3b"
@@ -52,6 +69,7 @@ INK, GRID = "#0b0b0b", "#e1e0d9"
 BAND_COLORS = [GOOD, WARN, SERI, CRIT]
 BAND_NAMES = ["Smooth", "Normal", "Busy", "Packed"]
 
+# 中文：matplotlib 全局样式——小字号适配报告双栏、浅灰网格、去顶右框线
 plt.rcParams.update({
     "font.size": 9, "axes.titlesize": 9.5, "axes.labelsize": 9,
     "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8,
@@ -64,11 +82,13 @@ plt.rcParams.update({
 
 
 def short(series):
+    # 中文：序列 → 短标签，如 ("Lo Wu","Departure") → "LoWu Dep"
     cp, direction = series
     return "%s %s" % (CPS[cp]["short"], "Dep" if direction == "Departure" else "Arr")
 
 
 def decorate(ax, title=None, xlabel=None, ylabel=None):
+    # 中文：统一装饰——标题靠左（阅读动线更自然）+ 可选轴标签
     if title:
         ax.set_title(title, loc="left")
     if xlabel:
@@ -78,6 +98,7 @@ def decorate(ax, title=None, xlabel=None, ylabel=None):
 
 
 def save(fig, name):
+    # 中文：存 PNG（150 dpi、tight 边框）并立即关图防内存堆积
     os.makedirs(FIGS, exist_ok=True)
     path = os.path.join(FIGS, name)
     fig.savefig(path)
@@ -87,6 +108,7 @@ def save(fig, name):
 
 # ---------------------------------------------------------------- fig01
 def fig01_overview(p):
+    # 中文：16 宫格总览。按近 400 天中位数降序排列；虚线标复关日。
     order = sorted(p.columns, key=lambda s: -p[s].tail(400).median())
     fig, axes = plt.subplots(4, 4, figsize=(7.4, 6.4), sharex=True)
     reopen_ts = pd.Timestamp(REOPEN)
@@ -112,6 +134,8 @@ def fig01_overview(p):
 
 # ---------------------------------------------------------------- fig02
 def fig02_reopen(p):
+    # 中文：罗湖出境复关前后对比——周中位数折线 + 复关前后两条中位参考线，
+    # 倍数标注展示"复关台阶"的量级。
     s = ("Lo Wu", "Departure")
     v = p[s]["2022-09-01":"2023-10-31"]
     wk = v.resample("W").median() / 1000.0
@@ -136,6 +160,8 @@ def fig02_reopen(p):
 
 # ---------------------------------------------------------------- fig03
 def fig03_festive(p):
+    # 中文：节假日系数分组柱状图（7 假期 × 头/中/尾 × 出/入方向）。
+    # 1.0 虚线 = 无假期效应基线。
     fmult = festive_multipliers(p, p.index[-1])
     codes = ["CNY", "ChingMing", "Easter", "MayDay", "NatDay", "Xmas", "NewYear"]
     phases = ["first", "mid", "last"]
@@ -161,6 +187,9 @@ def fig03_festive(p):
 
 # ---------------------------------------------------------------- fig04
 def fig04_lof(p):
+    # 中文：LOF 分数散点时间线（复关后）。蓝=正常日、红=被标记；
+    # 虚线是 1.3 分数闸门。三个已知台风/黑雨日用箭头标注——
+    # 图证：LOF 确实抓住了真实的异常天。
     s = ("Lo Wu", "Departure")
     post_mask = np.asarray(p.index >= pd.Timestamp(REOPEN))
     flow = p[s].values.astype(float)
@@ -192,6 +221,8 @@ def fig04_lof(p):
 
 # ---------------------------------------------------------------- fig05
 def fig05_backtest():
+    # 中文：回测三联图（RMSE / MAPE / ±1 档位命中率），数据直接来自
+    # report/backtest.json（backtest.py 的产物，不在这里重算）。
     with open(os.path.join(ROOT, "report", "backtest.json"), encoding="utf-8") as fh:
         bt = json.load(fh)
     models = [("baseline", "Weekday median x festive", BASE),
@@ -221,6 +252,8 @@ def fig05_backtest():
     save(fig, "fig05_backtest.png")
 
     # per-series RMSE panel (own GBT)
+    # 中文：分序列 RMSE 条形图（自写 GBT）。eval 只用于自家生成的键
+    # （"(口岸, 方向)" 元组的字符串形式），无外部输入风险。
     per = bt["per_series_gbt"]
     items = sorted(per.items(), key=lambda kv: kv[1]["rmse"])
     names = [short(eval(k)) for k, _ in items]          # noqa: S307 - own json
@@ -238,6 +271,9 @@ def fig05_backtest():
 
 # ---------------------------------------------------------------- fig06
 def fig06_importance(p, panel, anomalies, model):
+    # 中文：特征重要性。独热族（星期/月份/假期代码/序列/阶段）先按族
+    # 合并再展示，否则 56 条里 45 条都是独热、看不出结构；其余特征
+    # 用易读名（"lag-1 log flow"等）。取前 14 名画横向条形图。
     imp = model.importance_ / model.importance_.sum()
     fams = {"dow_": "day-of-week one-hots", "m_": "month one-hots",
             "code_": "holiday-code one-hots", "series_": "series one-hots",
@@ -273,6 +309,9 @@ def fig06_importance(p, panel, anomalies, model):
 
 # ---------------------------------------------------------------- fig07
 def fig07_forecast(p):
+    # 中文：预测扇形图——罗湖出境最近 120 天实测 + 未来 14 天递归预测
+    # 与 P10-P90 区间带。数据直接读产品的 docs/data.json（所见即所得）。
+    # 返回该序列的 σ 给 fig09 用。
     with open(os.path.join(ROOT, "docs", "data.json"), encoding="utf-8") as fh:
         d = json.load(fh)
     rows = d["forecast"]["LoWu|Departure"]
@@ -299,6 +338,9 @@ def fig07_forecast(p):
 
 # ---------------------------------------------------------------- fig08
 def fig08_markov(p):
+    # 中文：马尔可夫双联图——左：4×4 转移矩阵热图（数值标注）；
+    # 右：从今天档位出发 1..14 天的档位分布，虚线为平稳分布
+    # （走远了会回到无条件的档位频率）。
     s = ("Lo Wu", "Departure")
     post_mask = np.asarray(p.index >= pd.Timestamp(REOPEN))
     post = p[s][post_mask]
@@ -345,6 +387,9 @@ def fig08_markov(p):
 
 # ---------------------------------------------------------------- fig09
 def fig09_mc(p, sigma):
+    # 中文：蒙特卡洛排队分布——P90 那天在罗湖出境的 6000 次抽样等待
+    # 时间直方图；30 分钟红线、中位数与 P95 虚线。与前端实时风险页
+    # 用同一套 mc_queue 模型，这里抽样更多（6000 vs 3000）只为图更平滑。
     s = ("Lo Wu", "Departure")
     post = p[s][p.index >= pd.Timestamp(REOPEN)]
     q90 = float(np.percentile(post, 90))
@@ -370,6 +415,8 @@ def fig09_mc(p, sigma):
 
 # ---------------------------------------------------------------- fig10
 def fig10_intraday():
+    # 中文：日内模板小倍数图（3 种口岸类型 × 出/入方向），
+    # 每格叠工作日（实线）与周日（虚线）两条曲线，数据来自产品 data.json。
     with open(os.path.join(ROOT, "docs", "data.json"), encoding="utf-8") as fh:
         d = json.load(fh)
     T = d["intraday"]["templates"]
@@ -394,6 +441,8 @@ def fig10_intraday():
 
 # ---------------------------------------------------------------- fig11
 def fig11_nlp():
+    # 中文：NLP 双联图——左：12 个景点按好评率排序的条形图；
+    # 右：自写实现 vs sklearn 的 Accuracy/AUC 对照（真实测试集）。
     with open(os.path.join(ROOT, "docs", "nlp.json"), encoding="utf-8") as fh:
         nlp = json.load(fh)
     at = sorted(nlp["attractions"], key=lambda a: a["pos"])
@@ -434,6 +483,9 @@ def fig11_nlp():
 
 # ---------------------------------------------------------------- main
 def main():
+    # 中文：主流程。轻量图先画（fig01-05/10/11），然后一次性算好
+    # LOF + 合并训练 GBT（与 build_docs 完全同参），供 fig06-09 复用——
+    # 避免每张图各训一遍模型。
     p = load_panel(RAW, keep_cps=list(CPS))
     panel = Panel(p, list(p.columns))
     post_mask = np.asarray(p.index >= pd.Timestamp(REOPEN))
@@ -447,6 +499,7 @@ def main():
     fig11_nlp()
 
     # ---- shared heavy state: LOF + pooled GBT (as in build_docs) ----
+    # 中文：共享的重计算状态：LOF 标记 + 合并 GBT（与 build_docs 同参）
     anomalies = {}
     for s in p.columns:
         flow = p[s].values.astype(float)
