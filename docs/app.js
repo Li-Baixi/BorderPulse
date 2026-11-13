@@ -375,6 +375,12 @@ function todayISO() {
 function calBlock(cps, start, count) {
   const day = (i) => S.d.forecast[key(cps[0], S.dir)][i];
   const range = `${day(start).date.slice(5).replace("-", "/")} – ${day(start + count - 1).date.slice(5).replace("-", "/")}`;
+  /* pad a short final week with empty slots so the 7-column grid keeps its
+     geometry (like a month ending mid-week) — without them the trailing
+     empty tracks mis-size and the cells blow up */
+  /* 中文：末周不足 7 天时补空白占位格，保持 7 列网格几何不变形
+     （同月历月末留空的惯例）；不补的话尾部空轨道尺寸异常、格子会被撑大 */
+  const pad = count < 7 ? `<div class="gh" aria-hidden="true"></div>`.repeat(7 - count) : "";
   let h = `<div class="calblock"><div class="caltitle">${range}</div><div class="cal">`;
   h += `<div class="cp"></div>`;
   for (let i = start; i < start + count; i++) {
@@ -382,6 +388,7 @@ function calBlock(cps, start, count) {
     const isToday = r.date === todayISO();
     h += `<div class="hd ${r.dow >= 5 ? "we" : ""}${isToday ? " today" : ""}">${dowC(r.dow)}<br>${r.date.slice(5).replace("-", "/")}</div>`;
   }
+  h += pad;
   cps.forEach((cp) => {
     const st = S.d.stats[key(cp, S.dir)];
     h += `<div class="cp"><b>${st.short}</b>${cpn(cp)}</div>`;
@@ -393,6 +400,7 @@ function calBlock(cps, start, count) {
       h += `<button class="cell g${r.level} ${r.dow >= 5 ? "we" : ""}${isToday ? " today" : ""}" data-cp="${cp}" data-i="${i}"
         aria-label="${cpn(cp)} ${r.date} ${sw(r.level)}">${g}</button>`;
     }
+    h += pad;
   });
   return h + `</div></div>`;
 }

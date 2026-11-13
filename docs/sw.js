@@ -3,7 +3,7 @@
    策略：界面外壳（HTML/CSS/JS/图标）cache-first（快，很少变）；
    data.json network-first（在线拿最新数据、顺手更新缓存，离线回退）。
    VERSION 变更 = 缓存整体作废重装；发布新版时改这里即可。 */
-const VERSION = "bp-0.3.8";
+const VERSION = "bp-0.3.9";
 const SHELL = [   // 中文：预缓存的界面外壳清单（安装时一次性拉全）
   "./", "./index.html", "./styles.css", "./app.js",
   "./manifest.webmanifest", "./data.json",
