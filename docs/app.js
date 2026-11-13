@@ -835,6 +835,18 @@ async function boot() {
   document.title = t("title");
   const r = await fetch("./data.json");
   S.d = await r.json();
+  /* anchor the forecast window to TODAY: when the device date falls inside
+     the 14-day window, drop the already-past days so every view (calendar,
+     compare chips, queue sim) opens on today; if the data is stale (today
+     lies beyond the window) keep the original day-1 start */
+  /* 中文：把预测窗口锚定到“今天”——设备日期落在 14 天窗口内时，
+     丢弃已过去的日期，日历第一列永远是今天（对比页/排队页同步从今天起）；
+     数据过期（今天已超出窗口）则保持原样从第 1 天展示 */
+  {
+    const rows = S.d.forecast[key(cpOrder(S.dir)[0], S.dir)];
+    const t0 = rows.findIndex((x) => x.date === todayISO());
+    if (t0 > 0) for (const k of Object.keys(S.d.forecast)) S.d.forecast[k] = S.d.forecast[k].slice(t0);
+  }
   const cps = cpOrder(S.dir);
   S.cp = cps[0];
   const fs = S.d.forecast[key(S.cp, S.dir)];
